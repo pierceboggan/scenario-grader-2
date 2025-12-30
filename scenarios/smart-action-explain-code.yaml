@@ -1,0 +1,113 @@
+id: smart-action-explain-code
+name: "Explain Code with AI"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, explain, ai]
+priority: P1
+
+description: >
+  Tests the AI-powered code explanation feature. Validates that users
+  can select code, right-click, and get an AI explanation of what the
+  code does.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new untitled file command"
+    action: typeText
+    args:
+      text: "New Untitled Text File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_complex_code
+    description: "Type some complex code to explain"
+    action: typeText
+    args:
+      text: |
+        function debounce(func, wait) {
+          let timeout;
+          return function executedFunction(...args) {
+            const later = () => {
+              clearTimeout(timeout);
+              func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+          };
+        }
+    timeout: 3000
+
+  - id: select_all_code
+    description: "Select all code"
+    action: pressKey
+    args:
+      key: Meta+A
+    timeout: 1000
+
+  - id: explain_code
+    description: "Use Copilot to explain the code"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: explain_command
+    description: "Type explain command"
+    action: typeText
+    args:
+      text: "GitHub Copilot: Explain"
+    timeout: 2000
+
+  - id: select_explain
+    description: "Select explain command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_for_explanation
+    description: "Wait for explanation to appear in chat"
+    action: wait
+    args:
+      duration: 10000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=80"
+    required: false
+    description: "Verify explanation was clear and accurate for debounce function"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: select_all_code
+      name: "code-selected"
+    - atStep: wait_for_explanation
+      name: "explanation-provided"
+  storeChatTranscript: true
+  storeLogs: true

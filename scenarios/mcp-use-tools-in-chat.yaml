@@ -1,0 +1,107 @@
+id: mcp-use-tools-in-chat
+name: "Use MCP Tools in Copilot Chat"
+owner: "@copilot-platform"
+tags: [mcp, tools, chat, copilot]
+priority: P0
+
+description: >
+  Tests using MCP server tools within Copilot Chat. Validates that
+  MCP tools are available in the tool picker, can be invoked by the
+  AI agent, and return appropriate results.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "At least one MCP server configured and running"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_chat
+    description: "Open Copilot Chat"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 5000
+
+  - id: wait_chat_ready
+    description: "Wait for chat to be ready"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: open_tool_picker
+    description: "Open the tool picker in chat"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: search_tools
+    description: "Search for MCP tools command"
+    action: typeText
+    args:
+      text: "Chat: Select Tools"
+    timeout: 2000
+
+  - id: select_tools_command
+    description: "Select the tools command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_tool_picker
+    description: "Wait for tool picker to appear"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: close_tool_picker
+    description: "Close tool picker"
+    action: pressKey
+    args:
+      key: Escape
+    timeout: 1000
+
+  - id: use_mcp_tool
+    description: "Ask chat to use an MCP tool"
+    action: sendChatMessage
+    args:
+      message: "Use the available tools to help me with my current task. What tools do you have access to?"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_response
+    description: "Wait for tool response"
+    action: wait
+    args:
+      duration: 10000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify MCP tools are available and can be invoked"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: open_chat
+      name: "chat-opened"
+    - atStep: wait_tool_picker
+      name: "tool-picker"
+    - atStep: wait_response
+      name: "tool-response"
+  storeChatTranscript: true
+  storeLogs: true

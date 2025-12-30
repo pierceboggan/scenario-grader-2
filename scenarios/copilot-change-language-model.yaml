@@ -1,0 +1,118 @@
+id: copilot-change-language-model
+name: "Change AI Language Model"
+owner: "@copilot-team"
+tags: [copilot, models, customization, ai]
+priority: P1
+
+description: >
+  Tests the ability to switch between different AI language models
+  in Copilot Chat. Validates that the model picker works and that
+  different models can be selected for chat interactions.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Multiple language models available in subscription"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_chat
+    description: "Open Copilot Chat"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 5000
+
+  - id: wait_chat_ready
+    description: "Wait for chat to be ready"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: open_model_picker
+    description: "Open the model picker"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: search_model_command
+    description: "Search for change model command"
+    action: typeText
+    args:
+      text: "Chat: Select Model"
+    timeout: 2000
+
+  - id: select_model_command
+    description: "Select the model command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_model_picker
+    description: "Wait for model picker to appear"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: screenshot_models
+    description: "Capture available models"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: select_different_model
+    description: "Select a different model"
+    action: pressKey
+    args:
+      key: ArrowDown
+    timeout: 1000
+
+  - id: confirm_model
+    description: "Confirm model selection"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: test_new_model
+    description: "Test the new model with a prompt"
+    action: sendChatMessage
+    args:
+      message: "What model are you? Give me a brief response."
+      waitForResponse: true
+    timeout: 20000
+
+  - id: wait_response
+    description: "Wait for response"
+    action: wait
+    args:
+      duration: 5000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify model was successfully changed and responds correctly"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_model_picker
+      name: "model-picker"
+    - atStep: wait_response
+      name: "new-model-response"
+  storeChatTranscript: true
+  storeLogs: true

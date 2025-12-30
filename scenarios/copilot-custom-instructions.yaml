@@ -1,0 +1,164 @@
+id: copilot-custom-instructions
+name: "Apply Custom Instructions to Chat"
+owner: "@copilot-team"
+tags: [copilot, customization, instructions, ai]
+priority: P1
+
+description: >
+  Tests that custom instructions in .github/copilot-instructions.md
+  are applied to chat interactions. Validates that the AI follows
+  project-specific coding conventions defined in custom instructions.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_github_folder
+    description: "Create .github folder"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_folder_command
+    description: "Create new folder"
+    action: typeText
+    args:
+      text: "New Folder"
+    timeout: 2000
+
+  - id: select_new_folder
+    description: "Select new folder"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: name_folder
+    description: "Name folder .github"
+    action: typeText
+    args:
+      text: ".github"
+    timeout: 1000
+
+  - id: confirm_folder
+    description: "Confirm folder creation"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: create_instructions_file
+    description: "Create custom instructions file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new file command"
+    action: typeText
+    args:
+      text: "New File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_instructions
+    description: "Type custom instructions"
+    action: typeText
+    args:
+      text: |
+        # My Project Coding Guidelines
+        
+        ## Code Style
+        - Always use TypeScript with strict types
+        - Use arrow functions for all function expressions
+        - Prefer const over let
+        - Use meaningful variable names with camelCase
+        
+        ## Comments
+        - Add JSDoc comments to all exported functions
+        - Include @param and @returns tags
+        
+        ## Error Handling
+        - Always wrap async operations in try-catch
+        - Return Result<T, Error> types instead of throwing
+    timeout: 3000
+
+  - id: save_file
+    description: "Save as copilot-instructions.md"
+    action: pressKey
+    args:
+      key: Meta+S
+    timeout: 2000
+
+  - id: wait_for_save_dialog
+    description: "Wait for save dialog"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: type_filename
+    description: "Type filename"
+    action: typeText
+    args:
+      text: ".github/copilot-instructions.md"
+    timeout: 1000
+
+  - id: confirm_save
+    description: "Confirm save"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: open_chat
+    description: "Open Copilot Chat"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: test_instructions
+    description: "Ask chat to generate code to test if instructions are followed"
+    action: sendChatMessage
+    args:
+      message: "Create a function to fetch user data from an API. Follow my project guidelines."
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_response
+    description: "Wait for response"
+    action: wait
+    args:
+      duration: 10000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify generated code follows custom instructions (TypeScript, arrow functions, JSDoc)"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: type_instructions
+      name: "custom-instructions"
+    - atStep: wait_response
+      name: "response-following-instructions"
+  storeChatTranscript: true
+  storeLogs: true

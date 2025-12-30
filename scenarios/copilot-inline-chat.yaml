@@ -1,0 +1,124 @@
+id: copilot-inline-chat
+name: "Use Inline Chat for Code Refactoring"
+owner: "@copilot-team"
+tags: [copilot, inline-chat, refactoring, ai]
+priority: P0
+
+description: >
+  Tests the inline chat experience where users can select code and use
+  Cmd+I to open inline chat for targeted code modifications. Validates
+  the ability to refactor or modify selected code using natural language.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new untitled file command"
+    action: typeText
+    args:
+      text: "New Untitled Text File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_sample_code
+    description: "Type sample code to refactor"
+    action: typeText
+    args:
+      text: |
+        function add(a, b) {
+          return a + b;
+        }
+        
+        function subtract(a, b) {
+          return a - b;
+        }
+    timeout: 3000
+
+  - id: select_all_code
+    description: "Select all code"
+    action: pressKey
+    args:
+      key: Meta+A
+    timeout: 1000
+
+  - id: open_inline_chat
+    description: "Open inline chat with Cmd+I"
+    action: openInlineChat
+    timeout: 3000
+
+  - id: enter_refactor_prompt
+    description: "Enter refactoring prompt"
+    action: typeText
+    args:
+      text: "Add TypeScript types to these functions"
+    timeout: 2000
+
+  - id: submit_prompt
+    description: "Submit the inline chat prompt"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 10000
+
+  - id: wait_for_response
+    description: "Wait for inline chat response"
+    action: wait
+    args:
+      duration: 8000
+
+  - id: accept_changes
+    description: "Accept the suggested changes"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: wait_final
+    description: "Wait for final state"
+    action: wait
+    args:
+      duration: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=80"
+    required: false
+    description: "Verify inline chat provided relevant TypeScript refactoring"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: open_inline_chat
+      name: "inline-chat-opened"
+    - atStep: wait_for_response
+      name: "refactoring-suggested"
+    - atStep: wait_final
+      name: "changes-accepted"
+  storeChatTranscript: true
+  storeLogs: true

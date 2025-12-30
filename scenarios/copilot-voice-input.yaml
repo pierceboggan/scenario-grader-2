@@ -1,0 +1,91 @@
+id: copilot-voice-input
+name: "Use Voice Input with Copilot Chat"
+owner: "@copilot-team"
+tags: [copilot, voice, accessibility, ai]
+priority: P2
+
+description: >
+  Tests the voice input feature with Copilot Chat. Validates that users
+  can interact with chat using voice commands and speech-to-text.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "VS Code Speech extension installed"
+  - "Microphone access enabled"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_chat
+    description: "Open Copilot Chat"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 5000
+
+  - id: wait_chat_ready
+    description: "Wait for chat to be ready"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: start_voice_input
+    description: "Start voice input"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: voice_command
+    description: "Search for voice command"
+    action: typeText
+    args:
+      text: "Voice: Start Dictation"
+    timeout: 2000
+
+  - id: select_voice_command
+    description: "Select voice command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_voice_ready
+    description: "Wait for voice input to be ready"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: stop_voice
+    description: "Stop voice input"
+    action: pressKey
+    args:
+      key: Escape
+    timeout: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=70"
+    required: false
+    description: "Verify voice input feature is accessible in chat"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: open_chat
+      name: "chat-opened"
+    - atStep: wait_voice_ready
+      name: "voice-input-active"
+  storeChatTranscript: true
+  storeLogs: true

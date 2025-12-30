@@ -1,0 +1,93 @@
+id: mcp-install-server-from-registry
+name: "Install MCP Server from GitHub Registry"
+owner: "@copilot-platform"
+tags: [mcp, installation, registry, copilot]
+priority: P0
+
+description: >
+  Tests the ability to discover and install an MCP server from the
+  GitHub MCP server registry via the Extensions view. Validates the
+  end-to-end MCP server installation experience.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "MCP gallery enabled (chat.mcp.gallery.enabled setting)"
+  - "Network access to GitHub MCP Registry"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_extensions
+    description: "Open Extensions view"
+    action: pressKey
+    args:
+      key: Meta+Shift+X
+    timeout: 3000
+
+  - id: wait_extensions
+    description: "Wait for Extensions view to load"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: search_mcp
+    description: "Search for MCP servers"
+    action: typeText
+    args:
+      text: "@mcp"
+    timeout: 2000
+
+  - id: wait_search_results
+    description: "Wait for MCP server list to load"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: screenshot_registry
+    description: "Capture MCP registry results"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: select_first_server
+    description: "Select first MCP server in list"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: wait_details
+    description: "Wait for server details"
+    action: wait
+    args:
+      duration: 3000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=80"
+    required: false
+    description: "Verify MCP registry search works and shows server list"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_extensions
+      name: "extensions-view"
+    - atStep: wait_search_results
+      name: "mcp-registry-results"
+    - atStep: wait_details
+      name: "server-details"
+  storeChatTranscript: false
+  storeLogs: true

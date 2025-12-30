@@ -1,0 +1,79 @@
+id: copilot-agent-mode
+name: "Use Agent Mode for Autonomous Coding"
+owner: "@copilot-team"
+tags: [copilot, agent, autonomous, ai]
+priority: P0
+
+description: >
+  Tests the Agent mode in Copilot Chat where the AI autonomously plans
+  and implements complex development tasks. Validates that Agent can
+  create files, run commands, and coordinate multi-step workflows.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_chat
+    description: "Open Copilot Chat"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 5000
+
+  - id: wait_chat_ready
+    description: "Wait for chat to be ready"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: select_agent_mode
+    description: "Switch to Agent mode using the mode picker"
+    action: typeText
+    args:
+      text: "@agent "
+    timeout: 2000
+
+  - id: send_agent_prompt
+    description: "Send a complex task to the agent"
+    action: sendChatMessage
+    args:
+      message: "Create a simple calculator with HTML, CSS, and JavaScript. Include add, subtract, multiply, and divide operations."
+      waitForResponse: true
+    timeout: 60000
+
+  - id: wait_agent_response
+    description: "Wait for agent to complete task"
+    action: wait
+    args:
+      duration: 30000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify agent created appropriate files and implementation"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: open_chat
+      name: "chat-opened"
+    - atStep: wait_agent_response
+      name: "agent-completed"
+  storeChatTranscript: true
+  storeLogs: true

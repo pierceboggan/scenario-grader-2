@@ -1,0 +1,108 @@
+id: smart-action-generate-commit-message
+name: "Generate Commit Message with AI"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, git, commit]
+priority: P1
+
+description: >
+  Tests the AI-powered commit message generation in the Source Control
+  view. Validates that clicking the sparkle icon generates a relevant
+  commit message based on staged changes.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Workspace is a Git repository with uncommitted changes"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_source_control
+    description: "Open Source Control view"
+    action: pressKey
+    args:
+      key: Meta+Shift+G
+    timeout: 3000
+
+  - id: wait_source_control
+    description: "Wait for Source Control view"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: stage_changes
+    description: "Stage all changes"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: stage_all_command
+    description: "Type stage all command"
+    action: typeText
+    args:
+      text: "Git: Stage All Changes"
+    timeout: 2000
+
+  - id: select_stage_all
+    description: "Select stage all"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_staged
+    description: "Wait for changes to be staged"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: generate_commit_message
+    description: "Generate commit message with AI sparkle"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: generate_commit_command
+    description: "Type generate commit message command"
+    action: typeText
+    args:
+      text: "GitHub Copilot: Generate Commit Message"
+    timeout: 2000
+
+  - id: select_generate_commit
+    description: "Select generate commit message"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_for_message
+    description: "Wait for commit message to be generated"
+    action: wait
+    args:
+      duration: 5000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=80"
+    required: false
+    description: "Verify commit message was generated and is relevant to changes"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_source_control
+      name: "source-control-view"
+    - atStep: wait_for_message
+      name: "commit-message-generated"
+  storeChatTranscript: false
+  storeLogs: true

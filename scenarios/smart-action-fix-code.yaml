@@ -1,0 +1,126 @@
+id: smart-action-fix-code
+name: "Fix Coding Errors with AI"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, fix, debugging, ai]
+priority: P1
+
+description: >
+  Tests the AI-powered code fix feature. Validates that users can
+  select code with errors and have Copilot suggest fixes for issues
+  like syntax errors, logic problems, or missing imports.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new TypeScript file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new untitled file command"
+    action: typeText
+    args:
+      text: "New Untitled Text File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_buggy_code
+    description: "Type code with intentional bugs"
+    action: typeText
+    args:
+      text: |
+        function divideNumbers(a, b) {
+          return a / b;
+        }
+        
+        const result = divideNumbers(10, 0);
+        console.log(result);
+        
+        // Missing error handling for division by zero
+        // Missing type annotations
+    timeout: 3000
+
+  - id: select_all_code
+    description: "Select all code"
+    action: pressKey
+    args:
+      key: Meta+A
+    timeout: 1000
+
+  - id: fix_code
+    description: "Fix code with Copilot"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: fix_command
+    description: "Type fix command"
+    action: typeText
+    args:
+      text: "GitHub Copilot: Fix"
+    timeout: 2000
+
+  - id: select_fix
+    description: "Select fix command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_for_fix
+    description: "Wait for fix suggestions"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: accept_fix
+    description: "Accept the suggested fix"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_final
+    description: "Wait for final state"
+    action: wait
+    args:
+      duration: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify fix addressed division by zero and added proper error handling"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: select_all_code
+      name: "buggy-code-selected"
+    - atStep: wait_for_fix
+      name: "fix-suggested"
+    - atStep: wait_final
+      name: "fix-applied"
+  storeChatTranscript: true
+  storeLogs: true

@@ -1,0 +1,135 @@
+id: smart-action-generate-docs
+name: "Generate Documentation with AI"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, documentation, ai]
+priority: P1
+
+description: >
+  Tests the AI-powered documentation generation feature. Validates that
+  users can select code and have Copilot generate appropriate code comments
+  and documentation (JSDoc, docstrings, etc.).
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new TypeScript file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new untitled file command"
+    action: typeText
+    args:
+      text: "New Untitled Text File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_undocumented_code
+    description: "Type code without documentation"
+    action: typeText
+    args:
+      text: |
+        class UserService {
+          private users: Map<string, User> = new Map();
+          
+          createUser(name: string, email: string): User {
+            const id = crypto.randomUUID();
+            const user = { id, name, email, createdAt: new Date() };
+            this.users.set(id, user);
+            return user;
+          }
+          
+          getUserById(id: string): User | undefined {
+            return this.users.get(id);
+          }
+          
+          deleteUser(id: string): boolean {
+            return this.users.delete(id);
+          }
+        }
+    timeout: 3000
+
+  - id: select_all_code
+    description: "Select all code"
+    action: pressKey
+    args:
+      key: Meta+A
+    timeout: 1000
+
+  - id: generate_docs
+    description: "Generate documentation with Copilot"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: generate_docs_command
+    description: "Type generate docs command"
+    action: typeText
+    args:
+      text: "GitHub Copilot: Generate Docs"
+    timeout: 2000
+
+  - id: select_generate_docs
+    description: "Select generate docs command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_for_docs
+    description: "Wait for documentation to be generated"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: accept_docs
+    description: "Accept the generated documentation"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_final
+    description: "Wait for final state"
+    action: wait
+    args:
+      duration: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify documentation was generated with proper JSDoc format"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: select_all_code
+      name: "code-selected"
+    - atStep: wait_for_docs
+      name: "docs-generated"
+    - atStep: wait_final
+      name: "docs-applied"
+  storeChatTranscript: true
+  storeLogs: true

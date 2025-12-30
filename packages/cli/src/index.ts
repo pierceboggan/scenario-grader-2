@@ -7,6 +7,7 @@ import { listCommand } from './commands/list.js';
 import { validateCommand } from './commands/validate.js';
 import { createCommand } from './commands/create.js';
 import { showCommand } from './commands/show.js';
+import { recordCommand } from './commands/record.js';
 
 const program = new Command();
 
@@ -70,6 +71,20 @@ program
   .option('-t, --template <name>', 'Use a template')
   .option('-o, --output <path>', 'Output file path')
   .action(createCommand);
+
+// Record command
+program
+  .command('record')
+  .description('Record a new scenario by capturing VS Code interactions')
+  .option('-i, --interactive', 'Interactive mode with prompts')
+  .option('-n, --name <name>', 'Scenario name')
+  .option('-d, --description <text>', 'Scenario description')
+  .option('-t, --tags <tags>', 'Comma-separated tags')
+  .option('-p, --priority <priority>', 'Priority (P0|P1|P2)', 'P1')
+  .option('--owner <owner>', 'Scenario owner')
+  .option('-w, --workspace <path>', 'Workspace path to open')
+  .option('-o, --output <path>', 'Output directory for YAML file')
+  .action(recordCommand);
 
 // Show command
 program

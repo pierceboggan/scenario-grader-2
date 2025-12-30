@@ -1,0 +1,120 @@
+id: copilot-inline-suggestions
+name: "Accept Inline Code Suggestions"
+owner: "@copilot-team"
+tags: [copilot, inline-suggestions, completions, ai]
+priority: P0
+
+description: >
+  Tests the core inline suggestion experience where Copilot provides
+  ghost text completions as the user types code. Validates that suggestions
+  appear, can be accepted with Tab, and are contextually relevant.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new JavaScript file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new file command"
+    action: typeText
+    args:
+      text: "New File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: set_language
+    description: "Set language to JavaScript"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: change_language
+    description: "Change language mode"
+    action: typeText
+    args:
+      text: "Change Language Mode"
+    timeout: 2000
+
+  - id: select_change_language
+    description: "Select change language"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: select_javascript
+    description: "Select JavaScript"
+    action: typeText
+    args:
+      text: "JavaScript"
+    timeout: 2000
+
+  - id: confirm_javascript
+    description: "Confirm JavaScript selection"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_function_start
+    description: "Start typing a function to trigger suggestions"
+    action: typeText
+    args:
+      text: "function calculateDaysBetweenDates("
+    timeout: 5000
+
+  - id: wait_for_suggestion
+    description: "Wait for inline suggestion to appear"
+    action: wait
+    args:
+      duration: 3000
+
+  - id: accept_suggestion
+    description: "Accept the inline suggestion with Tab"
+    action: acceptSuggestion
+    timeout: 2000
+
+  - id: wait_final
+    description: "Wait for final state"
+    action: wait
+    args:
+      duration: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=80"
+    required: false
+    description: "Verify inline suggestion appeared and was relevant"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_for_suggestion
+      name: "suggestion-appeared"
+    - atStep: wait_final
+      name: "suggestion-accepted"
+  storeChatTranscript: false
+  storeLogs: true

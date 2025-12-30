@@ -1,0 +1,174 @@
+id: copilot-next-edit-suggestions
+name: "Accept Next Edit Suggestions (NES)"
+owner: "@copilot-team"
+tags: [copilot, nes, next-edit, ai]
+priority: P1
+
+description: >
+  Tests Copilot Next Edit Suggestions (NES) which predicts the next
+  logical code change based on current context. Validates that NES
+  shows edit suggestions and allows Tab navigation to accept them.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Next Edit Suggestions enabled in settings"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new TypeScript file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new file command"
+    action: typeText
+    args:
+      text: "New File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: set_language
+    description: "Set language to TypeScript"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: change_language
+    description: "Change language mode"
+    action: typeText
+    args:
+      text: "Change Language Mode"
+    timeout: 2000
+
+  - id: select_change_language
+    description: "Select change language"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: select_typescript
+    description: "Select TypeScript"
+    action: typeText
+    args:
+      text: "TypeScript"
+    timeout: 2000
+
+  - id: confirm_typescript
+    description: "Confirm TypeScript selection"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_class_definition
+    description: "Type a class that needs to be extended"
+    action: typeText
+    args:
+      text: |
+        class Point {
+          x: number;
+          y: number;
+          
+          constructor(x: number, y: number) {
+            this.x = x;
+            this.y = y;
+          }
+        }
+    timeout: 3000
+
+  - id: rename_to_point3d
+    description: "Rename Point to Point3D to trigger NES"
+    action: pressKey
+    args:
+      key: Meta+H
+    timeout: 2000
+
+  - id: find_point
+    description: "Find Point"
+    action: typeText
+    args:
+      text: "Point"
+    timeout: 1000
+
+  - id: tab_to_replace
+    description: "Tab to replace field"
+    action: pressKey
+    args:
+      key: Tab
+    timeout: 1000
+
+  - id: replace_with_point3d
+    description: "Replace with Point3D"
+    action: typeText
+    args:
+      text: "Point3D"
+    timeout: 1000
+
+  - id: replace_one
+    description: "Replace one occurrence"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: close_find
+    description: "Close find dialog"
+    action: pressKey
+    args:
+      key: Escape
+    timeout: 1000
+
+  - id: wait_for_nes
+    description: "Wait for NES to suggest adding z property"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: accept_nes
+    description: "Accept NES suggestion with Tab"
+    action: pressKey
+    args:
+      key: Tab
+    timeout: 2000
+
+  - id: wait_final
+    description: "Wait for final state"
+    action: wait
+    args:
+      duration: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify NES suggested relevant edit after rename"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_for_nes
+      name: "nes-suggestion"
+    - atStep: wait_final
+      name: "nes-accepted"
+  storeChatTranscript: false
+  storeLogs: true

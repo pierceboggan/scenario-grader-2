@@ -1,0 +1,85 @@
+id: copilot-semantic-search
+name: "Use AI Semantic Search"
+owner: "@copilot-team"
+tags: [copilot, search, semantic, ai]
+priority: P1
+
+description: >
+  Tests the AI-powered semantic search feature in the Search view.
+  Validates that semantic search returns contextually relevant results
+  even when terms don't match exactly.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Workspace with code files to search"
+  - "Semantic search enabled (search.searchView.semanticSearchBehavior)"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_search
+    description: "Open Search view"
+    action: pressKey
+    args:
+      key: Meta+Shift+F
+    timeout: 3000
+
+  - id: wait_search
+    description: "Wait for Search view to open"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: enter_semantic_query
+    description: "Enter a semantic search query"
+    action: typeText
+    args:
+      text: "function that handles user authentication"
+    timeout: 2000
+
+  - id: trigger_search
+    description: "Trigger the search"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 3000
+
+  - id: wait_semantic_results
+    description: "Wait for semantic search results"
+    action: wait
+    args:
+      duration: 8000
+
+  - id: screenshot_results
+    description: "Capture semantic search results"
+    action: wait
+    args:
+      duration: 2000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify semantic search returns contextually relevant results"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_search
+      name: "search-view"
+    - atStep: wait_semantic_results
+      name: "semantic-results"
+  storeChatTranscript: false
+  storeLogs: true

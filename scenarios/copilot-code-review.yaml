@@ -1,0 +1,118 @@
+id: copilot-code-review
+name: "AI Code Review in Editor"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, review, ai]
+priority: P1
+
+description: >
+  Tests the AI-powered code review feature. Validates that users can
+  select code and get an AI review with feedback on code quality,
+  best practices, and potential issues.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new untitled file command"
+    action: typeText
+    args:
+      text: "New Untitled Text File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_code_to_review
+    description: "Type code that needs review"
+    action: typeText
+    args:
+      text: |
+        function processUserData(data) {
+          var result = [];
+          for (var i = 0; i < data.length; i++) {
+            if (data[i].active == true) {
+              result.push({
+                name: data[i].name,
+                email: data[i].email,
+                password: data[i].password
+              });
+            }
+          }
+          return result;
+        }
+        
+        // TODO: Add error handling
+        // TODO: Remove password from response
+    timeout: 3000
+
+  - id: select_all_code
+    description: "Select all code"
+    action: pressKey
+    args:
+      key: Meta+A
+    timeout: 1000
+
+  - id: review_code
+    description: "Review code with Copilot"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: review_command
+    description: "Type review command"
+    action: typeText
+    args:
+      text: "GitHub Copilot: Review"
+    timeout: 2000
+
+  - id: select_review
+    description: "Select review command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_for_review
+    description: "Wait for code review"
+    action: wait
+    args:
+      duration: 15000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify review identifies security issue (password exposure) and suggests modern JS"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: select_all_code
+      name: "code-selected"
+    - atStep: wait_for_review
+      name: "review-comments"
+  storeChatTranscript: true
+  storeLogs: true

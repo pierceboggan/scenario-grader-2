@@ -54,29 +54,138 @@ function getOpenAIClient(apiKey?: string): OpenAI {
 // Evaluation Prompts
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are an expert developer experience (DX) evaluator for AI-powered code editors. Your job is to evaluate VS Code scenarios against best-in-class standards set by Cursor, Windsurf, and other modern AI IDEs.
+const SYSTEM_PROMPT = `You are an expert developer experience (DX) evaluator specializing in AI-powered developer tools. Your role is to evaluate VS Code + GitHub Copilot scenarios through the lens of real developers at different points in their AI adoption journey.
 
-You evaluate across these dimensions:
-- **Discoverability**: How easy is it to find and access AI features? Are entry points intuitive?
-- **UI Clarity**: Are AI interactions well-labeled and self-explanatory? Clear affordances?
-- **Speed & Responsiveness**: Is the AI fast? Are there streaming responses? Loading indicators? Does it feel instant?
-- **AI Integration Quality**: How seamlessly does AI blend into the workflow? Context awareness? Multi-turn conversations? Code application?
-- **Task Completion**: Can developers complete their intent quickly? Fewer steps than competitors?
-- **Polish & Delight**: Does the experience feel magical? Thoughtful animations? Attention to detail?
+## Your Evaluation Personas
 
-Benchmark against modern AI IDE standards:
-- Cursor: Inline edits, fast completions, Cmd+K everywhere, agent mode
-- Windsurf: Cascade flows, ambient awareness, predictive actions  
-- Claude/ChatGPT coding: Context retention, code application, iteration speed
+Think about these two distinct users when evaluating:
 
-Score each dimension from 1-5:
-- 1: Significantly behind competitors, major friction
-- 2: Below average, noticeable gaps vs modern AI IDEs
-- 3: On par with baseline expectations, some friction
-- 4: Good experience, competitive with best-in-class
-- 5: Exceptional, sets new standards for AI coding UX
+**The AI-Curious Developer ("Alex")**
+- Has used ChatGPT/Claude for coding questions, but hasn't integrated AI into their IDE workflow
+- Skeptical but interested: "Will this actually save me time, or just be another thing to learn?"
+- Needs clear value demonstration in the first 30 seconds
+- Gets frustrated by: unclear entry points, AI responses that require lots of context-switching, jargon without explanation
+- Delighted by: "it just works" moments, AI that understands their actual intent, less typing for common tasks
 
-Provide specific, actionable feedback tied to what you observe. Reference competitor features when relevant.`;
+**The Power User ("Jordan")**  
+- Uses Cursor/Windsurf daily, has customized keybindings, knows every shortcut
+- Expects: instant responses, keyboard-first workflows, multi-file awareness, agent-level autonomy
+- Gets frustrated by: mouse-heavy flows, lack of context retention between sessions, AI that "forgets" project structure
+- Evaluates against: Cursor's Cmd+K inline edits, Windsurf's cascade flows, Claude's agentic tool use
+
+## Evaluation Dimensions
+
+Score each 1-5 from BOTH user perspectives. A great experience works for Alex AND Jordan.
+
+### 1. Discoverability (Weight: 15%)
+For Alex: Can they find and invoke AI features without reading docs? Are entry points visible where they expect help?
+For Jordan: Are there keyboard shortcuts? Can they access features without leaving the flow?
+
+Signs of excellence:
+- AI help surfaces contextually (e.g., error squiggles offer "Fix with Copilot")
+- Multiple entry points: command palette, keyboard shortcuts, inline triggers, context menus
+- Visual cues (icons, hover hints) that teach without interrupting
+
+Red flags:
+- Features hidden in nested menus
+- No keyboard-first path
+- Unclear when AI is available vs. not
+
+### 2. UI Clarity (Weight: 15%)
+For Alex: Is it obvious what the AI can do? Do labels use plain language vs. jargon?
+For Jordan: Is the UI information-dense enough? Can they see all relevant context at a glance?
+
+Signs of excellence:
+- AI interactions clearly labeled ("Copilot is thinking...", "3 files will be modified")
+- Preview of changes before applying (diffs, highlighted regions)
+- Clear escape hatches ("Reject", "Undo", "Start over")
+
+Red flags:
+- "Magic" actions without explanation of what will happen
+- No clear indication of AI-generated vs. user-written code
+- Terminology that assumes prior AI knowledge
+
+### 3. Speed & Responsiveness (Weight: 20%)
+For Alex: Does it feel instant? Do they see feedback immediately?
+For Jordan: First-token latency, streaming quality, no perceptible lag vs. competitors
+
+Signs of excellence:
+- Streaming responses (not waiting for full completion)
+- Optimistic UI updates (typing indicators, "thinking" states appear <100ms)
+- Smooth animations that indicate progress without blocking
+
+Red flags:
+- Blank states during loading
+- "Spinner of uncertainty" - loading with no progress indication
+- UI freezes during AI operations
+- Response takes >3s with no intermediate feedback
+
+### 4. AI Integration Quality (Weight: 20%)  
+For Alex: Does the AI understand what I'm trying to do without lengthy explanations?
+For Jordan: Context window utilization, multi-turn coherence, tool/function calling, workspace awareness
+
+Signs of excellence:
+- AI references current file, selection, and project structure automatically
+- Conversation context persists (follow-up questions work naturally)
+- Code suggestions compile and fit the project's patterns
+- Agent mode: autonomous planning, file creation, command execution
+
+Red flags:
+- AI ignores current selection or file context
+- Each message treated as isolated (no conversation memory)
+- Suggestions that don't match project language/framework
+- Agent hallucinates file paths or uses wrong APIs
+
+### 5. Task Completion (Weight: 20%)
+For Alex: Can I accomplish my goal faster than I would manually? Did it reduce cognitive load?
+For Jordan: Fewer keystrokes than typing manually? Fewer steps than Cursor/Windsurf?
+
+Signs of excellence:
+- Common tasks (explain code, fix error, write test) achievable in 1-2 interactions
+- AI handles the boring parts (boilerplate, imports, type definitions)
+- Easy to apply suggestions (one-click or Enter to accept)
+- Iteration is fast (refine → see update → refine again)
+
+Red flags:
+- More steps than doing it manually
+- Copy-paste required to apply suggestions
+- AI output requires significant manual cleanup
+- Dead ends that require starting over
+
+### 6. Polish & Delight (Weight: 10%)
+For Alex: Does this feel like a premium, trustworthy tool? Are there "wow" moments?
+For Jordan: Attention to detail. The 10% that separates good from great.
+
+Signs of excellence:
+- Thoughtful micro-interactions (hover states, transitions, feedback sounds)
+- Error handling that helps, not frustrates ("Try rephrasing" vs. "Error 500")
+- Surprising capability ("I didn't know it could do that!")
+- Consistent visual language
+
+Red flags:
+- Janky animations or layout shifts
+- Generic error messages
+- Inconsistent behavior between similar features
+- Feels like an afterthought bolted onto VS Code
+
+## Competitor Benchmarks (for reference)
+
+When suggesting improvements, ground them in real alternatives developers have:
+- **Cursor**: Cmd+K inline edits, Tab to accept suggestions, Composer for multi-file, fast completions
+- **Windsurf**: Cascade for iterative refinement, ambient context awareness, predictive actions
+- **Claude Code/ChatGPT Canvas**: Deep reasoning, code application, artifact generation
+- **Continue.dev**: Open source, local model support, customizable
+
+## Scoring Guide
+
+1 = "This actively drives developers away" - Major usability failures, Alex gives up, Jordan switches tools
+2 = "Noticeably worse than alternatives" - Works but frustrating, Alex confused, Jordan annoyed
+3 = "Meets baseline expectations" - Functional but unremarkable, neither persona is delighted
+4 = "Competitive with best-in-class" - Alex impressed, Jordan finds it efficient
+5 = "Sets new standards" - Genuinely better than alternatives in meaningful ways
+
+Be specific. Instead of "improve responsiveness", say "First-token latency of ~2s feels slow. Cursor shows thinking indicator within 200ms. Add skeleton UI or typing indicator to bridge the gap."`;
+
 
 function buildUserPrompt(
   scenario: Scenario,
@@ -88,6 +197,11 @@ function buildUserPrompt(
     return `${i + 1}. [${s.status.toUpperCase()}] ${step?.description || s.stepId}${s.error ? ` - Error: ${s.error}` : ''}`;
   }).join('\n') || 'No step details available';
 
+  const totalDuration = runReport.duration || 0;
+  const stepCount = runReport.steps?.length || 0;
+  const passedSteps = runReport.steps?.filter(s => s.status === 'passed').length || 0;
+  const failedSteps = runReport.steps?.filter(s => s.status === 'failed').length || 0;
+
   return `## Scenario Under Evaluation
 
 **Name**: ${scenario.name}
@@ -95,41 +209,126 @@ function buildUserPrompt(
 **Priority**: ${scenario.priority}
 **Tags**: ${(scenario.tags || []).join(', ') || 'None'}
 
-## Execution Summary
-- **Status**: ${runReport.status || 'unknown'}
-- **Duration**: ${runReport.duration ? `${runReport.duration}ms` : 'unknown'}
-- **Steps Passed**: ${runReport.steps?.filter(s => s.status === 'passed').length || 0}/${runReport.steps?.length || 0}
+---
 
-## Steps Executed
+## What You're Evaluating
+
+This is an automated test run of a VS Code + Copilot scenario. Your job is to evaluate the **developer experience quality** based on:
+1. The screenshots captured at key moments (if provided)
+2. The execution logs showing what happened
+3. The chat transcript (if this scenario involved Copilot Chat)
+4. The step-by-step execution details
+
+Think about: "If Alex (AI-curious developer) or Jordan (power user) went through this flow, how would they feel?"
+
+---
+
+## Execution Summary
+
+| Metric | Value |
+|--------|-------|
+| Status | ${runReport.status || 'unknown'} |
+| Total Duration | ${totalDuration ? `${(totalDuration / 1000).toFixed(1)}s` : 'unknown'} |
+| Steps Executed | ${stepCount} |
+| Passed | ${passedSteps} |
+| Failed | ${failedSteps} |
+
+## Detailed Step Execution
 ${stepsExecuted}
 
-## Logs
+---
+
+## Logs (truncated if long)
 \`\`\`
 ${artifacts.logs?.slice(0, 5000) || 'No logs available'}
 \`\`\`
 
-${artifacts.chatTranscript ? `## Chat Transcript\n\`\`\`\n${artifacts.chatTranscript.slice(0, 3000)}\n\`\`\`` : ''}
+${artifacts.chatTranscript ? `---
 
-## Required Output
-Analyze the execution and provide your evaluation as a JSON object with this exact structure:
+## Chat Transcript
+This shows the actual conversation between the user and Copilot during this scenario:
+
+\`\`\`
+${artifacts.chatTranscript.slice(0, 4000)}
+\`\`\`` : ''}
+
+---
+
+## Your Evaluation Task
+
+Analyze this scenario run and provide your evaluation. Consider:
+
+1. **For each dimension**: How would Alex experience this? How would Jordan experience this? What's the gap?
+
+2. **Evidence-based scoring**: Reference specific logs, errors, timings, or observable behaviors in your feedback. Don't guess—evaluate what you can actually see.
+
+3. **Actionable suggestions**: Generate suggestions that a PM or engineer could act on. Include severity (how much does this hurt the experience?) and labels (what area/team owns this?).
+
+---
+
+## Required JSON Output
+
+Return your evaluation as a JSON object with this exact structure:
+
+\`\`\`json
 {
-  "overallScore": <number 1-5>,
+  "overallScore": <number 1-5, weighted average based on dimension weights>,
   "dimensions": [
-    { "id": "<dimension-id>", "name": "<Dimension Name>", "score": <1-5>, "feedback": "<specific feedback>" }
+    { 
+      "id": "discoverability", 
+      "name": "Discoverability", 
+      "score": <1-5>,
+      "feedback": "<2-3 sentences. What did you observe? How would Alex/Jordan experience this? What's missing?>"
+    },
+    { 
+      "id": "clarity", 
+      "name": "UI Clarity", 
+      "score": <1-5>,
+      "feedback": "<2-3 sentences>"
+    },
+    { 
+      "id": "responsiveness", 
+      "name": "Speed & Responsiveness", 
+      "score": <1-5>,
+      "feedback": "<2-3 sentences. Reference actual timings from logs if available.>"
+    },
+    { 
+      "id": "ai-integration", 
+      "name": "AI Integration Quality", 
+      "score": <1-5>,
+      "feedback": "<2-3 sentences. Did the AI understand context? Was the output relevant?>"
+    },
+    { 
+      "id": "completion", 
+      "name": "Task Completion", 
+      "score": <1-5>,
+      "feedback": "<2-3 sentences. Was the goal achievable? How many steps/interactions?>"
+    },
+    { 
+      "id": "polish", 
+      "name": "Polish & Delight", 
+      "score": <1-5>,
+      "feedback": "<2-3 sentences>"
+    }
   ],
   "suggestions": [
     { 
-      "title": "<short title>", 
-      "description": "<detailed markdown description with specific recommendations>", 
-      "labels": ["area:<feature>", "type:<bug|ux|feature|accessibility>"],
-      "severity": "low|medium|high|critical"
+      "title": "<short, actionable title - max 10 words>", 
+      "description": "<detailed markdown description. Include: what's wrong, who it affects (Alex/Jordan/both), what 'good' looks like (cite competitor if relevant), specific recommendation>", 
+      "labels": ["area:<copilot|editor|chat|agent|inline|mcp>", "type:<bug|ux|feature|performance|accessibility>"],
+      "severity": "<low|medium|high|critical - based on how much this hurts the experience>"
     }
   ]
 }
+\`\`\`
 
-Ensure dimensions array includes all 6 dimensions: discoverability, clarity, responsiveness, ai-integration, completion, polish.
-Generate 1-5 suggestions based on issues found. Focus on actionable improvements.`;
+**Important**:
+- Include ALL 6 dimensions in the dimensions array
+- Generate 1-5 suggestions, prioritized by severity
+- Be specific—vague feedback like "could be faster" isn't actionable
+- If the scenario failed or had errors, factor that into your scores but also consider what the experience would be if it worked`;
 }
+
 
 // ============================================================================
 // Main Evaluation Function
@@ -292,75 +491,82 @@ function normalizeEvaluation(parsed: any, rawResponse: string): LLMEvaluation {
 
 const SAMPLE_FEEDBACK = {
   discoverability: [
-    'Entry points for AI features are intuitive and well-placed.',
-    'Users may miss AI capabilities without better visual cues - Cursor shows inline hints.',
-    'Clear iconography and keyboard shortcuts make this feature highly discoverable.',
-    'Consider a command palette integration similar to Cursor\'s Cmd+K everywhere pattern.',
+    'The Cmd+Shift+I shortcut opens chat quickly, but Alex might not know it exists without prompting. Consider adding a subtle hint when hovering over code errors.',
+    'Jordan would appreciate that the command palette includes the action, but first-time users may struggle to find the entry point. Cursor shows inline hints near errors.',
+    'Multiple entry points exist (keyboard, command palette, icon), which works for both personas. The chat icon in the sidebar is clearly visible.',
+    'Alex could easily miss this feature—there\'s no contextual prompt suggesting AI help. Windsurf shows proactive suggestions based on recent edits.',
   ],
   clarity: [
-    'AI interactions are well-labeled with clear affordances.',
-    'Some terminology may confuse users new to AI coding assistants.',
-    'Excellent visual hierarchy guides users through AI workflows.',
-    'The flow could benefit from clearer step indicators like Windsurf\'s cascade status.',
+    'The chat interface is clean and self-explanatory. Both Alex and Jordan would understand what to do immediately.',
+    'Some terminology ("Agent mode", "Cascade") might confuse Alex. Plain language like "Let AI do multiple steps" would be clearer.',
+    'Clear visual feedback when AI is processing. The "Copilot is thinking" indicator sets good expectations.',
+    'Jordan would appreciate the information density, but Alex might feel overwhelmed. Consider progressive disclosure of advanced options.',
   ],
   responsiveness: [
-    'Streaming responses feel fast and modern - competitive with Cursor.',
-    'Response latency is noticeable - consider optimistic UI or skeleton states.',
-    'Excellent perceived performance with instant feedback throughout.',
-    'First-token latency could be improved - Windsurf shows thinking indicators sooner.',
+    'Streaming responses feel modern—comparable to Cursor. First token appears quickly enough that both users feel acknowledged.',
+    'There\'s a noticeable ~2s delay before first response. Alex might think it\'s broken. Add a typing indicator within 200ms like ChatGPT.',
+    'The thinking indicator appears immediately, which is excellent. However, no progress indication for longer operations leaves users uncertain.',
+    'Response time is competitive with Windsurf. The streaming animation is smooth and gives good feedback during generation.',
   ],
   'ai-integration': [
-    'AI seamlessly integrates into the editing workflow without context switching.',
-    'Context awareness could be improved - Cursor maintains better conversation context.',
-    'Code application is smooth with clear diff previews.',
-    'Consider adding ambient awareness features like Windsurf\'s predictive suggestions.',
+    'The AI correctly understood the current file context without explicit instruction. This "it just works" moment is key for Alex\'s adoption.',
+    'Multi-turn conversation worked well—Jordan can build on previous messages. However, context seems limited to current file vs. full workspace.',
+    'Code suggestions matched the project\'s TypeScript patterns. The AI clearly has access to relevant context.',
+    'Agent mode autonomously created files as expected, though Jordan would want more control over the plan before execution (like Cursor\'s Composer preview).',
   ],
   completion: [
-    'Developers can complete tasks with minimal friction.',
-    'Some users may get stuck at intermediate steps - consider guided flows.',
-    'The happy path is efficient and competitive with modern AI IDEs.',
-    'Consider reducing clicks/steps - Cursor often achieves tasks in fewer interactions.',
+    'The task was achievable in 2 interactions, which is efficient. Alex would feel productive; Jordan would find it comparable to Cursor.',
+    'Required 4 steps when Cursor achieves the same in 2 (Cmd+K inline). There\'s room to reduce friction for power users.',
+    'One-click to apply suggestions worked smoothly. The "Apply" button is prominent and the diff preview builds trust before committing.',
+    'The happy path works well, but error recovery is unclear. When the AI misunderstood, Jordan had to start over vs. refining the prompt.',
   ],
   polish: [
-    'The experience feels magical and delightful - attention to detail is evident.',
-    'Minor visual inconsistencies detract from the premium feel.',
-    'Thoughtful animations and transitions enhance the experience.',
-    'Some micro-interactions could be smoother - compare to Cursor\'s inline edit animations.',
+    'Subtle animations during generation feel premium. This attention to detail builds trust, especially for Alex who\'s evaluating whether AI tools are "ready".',
+    'The experience feels cohesive with VS Code\'s design language. No jarring visual inconsistencies.',
+    'Minor layout shift when response loads breaks the polish. Compare to Claude\'s smooth expansion animations.',
+    'Error messages are helpful ("Try rephrasing your request") rather than technical. This helps Alex recover without frustration.',
   ],
 };
 
 const SAMPLE_SUGGESTIONS: Omit<Suggestion, 'id'>[] = [
   {
-    title: 'Add inline AI edit capability (Cmd+K pattern)',
-    description: 'Cursor popularized Cmd+K for inline edits anywhere in the editor. Consider a similar pattern for quick AI-powered code modifications without opening a separate chat panel.',
-    labels: ['area:copilot', 'type:feature', 'competitor:cursor'],
+    title: 'Add contextual AI hints near code errors',
+    description: '**Who it affects**: Alex (AI-curious developer) primarily.\n\n**Problem**: When Alex sees a TypeScript error, they don\'t naturally think to invoke Copilot. The AI capability is invisible at the moment of need.\n\n**What good looks like**: Cursor shows a subtle "Fix with AI" affordance inline with error squiggles. Clicking it opens inline chat pre-filled with the error context.\n\n**Recommendation**: Add a CodeLens or hover action near diagnostics: "Fix with Copilot". This teaches the feature through use and captures users at high-intent moments.',
+    labels: ['area:copilot', 'type:ux', 'persona:alex'],
     severity: 'high',
   },
   {
-    title: 'Improve streaming response latency',
-    description: 'First-token latency feels slower than Cursor/Windsurf. Consider optimistic UI updates, better caching, or showing a "thinking" indicator sooner to improve perceived performance.',
+    title: 'Reduce first-token latency with immediate feedback',
+    description: '**Who it affects**: Both Alex and Jordan.\n\n**Problem**: The ~1.5s gap between sending a message and seeing any response feels like an eternity. Alex might think it\'s broken; Jordan notices it\'s slower than Cursor.\n\n**What good looks like**: ChatGPT shows a typing indicator within 100ms. Cursor displays "Thinking..." immediately with a subtle animation.\n\n**Recommendation**: Immediately show a skeleton or typing indicator when the request is sent, before the first token arrives. This bridges perceived latency.',
     labels: ['area:copilot', 'type:performance', 'priority:high'],
     severity: 'high',
   },
   {
-    title: 'Add ambient context awareness',
-    description: 'Windsurf\'s Cascade shows predictive suggestions based on recent edits. Consider proactive AI suggestions that anticipate developer intent without explicit invocation.',
-    labels: ['area:copilot', 'type:feature', 'competitor:windsurf'],
+    title: 'Show workspace context being used',
+    description: '**Who it affects**: Jordan (power user) primarily.\n\n**Problem**: It\'s unclear whether Copilot is considering the full workspace or just the current file. Jordan needs to trust that context is being used appropriately.\n\n**What good looks like**: Claude\'s code mode shows "Reading file X..." as it gathers context. Cursor\'s Composer shows which files are in context.\n\n**Recommendation**: Add a collapsible "Context" section in chat showing which files/symbols the AI is considering. This builds trust and helps debug unexpected responses.',
+    labels: ['area:copilot', 'type:feature', 'persona:jordan'],
     severity: 'medium',
   },
   {
-    title: 'Implement multi-file edit preview',
-    description: 'When AI suggests changes across multiple files, show a unified diff view with accept/reject per-file similar to Cursor\'s agent mode output.',
-    labels: ['area:copilot', 'type:feature'],
+    title: 'Add inline edit capability (Cmd+K pattern)',
+    description: '**Who it affects**: Jordan primarily, but would delight Alex too.\n\n**Problem**: Current flow requires opening the full chat panel for even small edits. Jordan expects to select code → Cmd+K → type intent → see diff inline, like Cursor.\n\n**What good looks like**: Cursor\'s Cmd+K lets you edit code without opening a panel. The diff appears inline, you press Enter to accept. It\'s 3 keystrokes vs. 8+ with current flow.\n\n**Recommendation**: Implement lightweight inline edit triggered by Cmd+K in editor. Show diff inline, accept with Enter, reject with Escape. This is the #1 feature Jordan expects from modern AI IDEs.',
+    labels: ['area:inline', 'type:feature', 'competitor:cursor', 'priority:high'],
+    severity: 'high',
+  },
+  {
+    title: 'Improve agent plan preview before execution',
+    description: '**Who it affects**: Both personas, especially for Agent mode scenarios.\n\n**Problem**: Agent mode starts executing immediately. Jordan wants to review and approve the plan before files are modified. Alex might be alarmed by autonomous changes.\n\n**What good looks like**: Cursor\'s Composer shows a step-by-step plan with checkboxes before execution. Users can approve, modify, or cancel the plan.\n\n**Recommendation**: Before Agent executes, show the proposed plan: "I will create these files, modify these functions, run these commands." Let users approve step-by-step or all at once.',
+    labels: ['area:agent', 'type:ux', 'trust:safety'],
     severity: 'medium',
   },
   {
-    title: 'Add conversation context persistence',
-    description: 'Chat context is lost between sessions. Consider persisting conversation history and allowing users to reference previous discussions for better continuity.',
-    labels: ['area:copilot', 'type:ux'],
+    title: 'Persist conversation context between sessions',
+    description: '**Who it affects**: Jordan primarily.\n\n**Problem**: Chat history is lost when VS Code restarts. Jordan expects to continue conversations about the same codebase without re-explaining context.\n\n**What good looks like**: ChatGPT and Claude remember previous conversations. You can reference "the function we discussed yesterday" and the AI understands.\n\n**Recommendation**: Persist chat threads per-workspace. Allow users to reference previous conversations. Consider a "Continue where I left off" feature for complex multi-day tasks.',
+    labels: ['area:chat', 'type:feature', 'persona:jordan'],
     severity: 'medium',
   },
 ];
+
 
 function randomScore(min: number = 2, max: number = 5): number {
   return Math.round((Math.random() * (max - min) + min) * 10) / 10;

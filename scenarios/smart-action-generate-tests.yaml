@@ -1,0 +1,114 @@
+id: smart-action-generate-tests
+name: "Generate Tests with AI"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, testing, ai]
+priority: P1
+
+description: >
+  Tests the AI-powered test generation feature. Validates that users
+  can select code and have Copilot generate relevant unit tests for
+  the selected function or class.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: create_file
+    description: "Create a new TypeScript file"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: new_file_command
+    description: "Run new untitled file command"
+    action: typeText
+    args:
+      text: "New Untitled Text File"
+    timeout: 2000
+
+  - id: select_new_file
+    description: "Select new file option"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 2000
+
+  - id: type_function
+    description: "Type a function to generate tests for"
+    action: typeText
+    args:
+      text: |
+        function validateEmail(email: string): boolean {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          return emailRegex.test(email);
+        }
+        
+        function formatPhoneNumber(phone: string): string {
+          const cleaned = phone.replace(/\D/g, '');
+          if (cleaned.length === 10) {
+            return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+          }
+          return phone;
+        }
+    timeout: 3000
+
+  - id: select_all_code
+    description: "Select all code"
+    action: pressKey
+    args:
+      key: Meta+A
+    timeout: 1000
+
+  - id: generate_tests
+    description: "Generate tests with Copilot"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: generate_tests_command
+    description: "Type generate tests command"
+    action: typeText
+    args:
+      text: "GitHub Copilot: Generate Tests"
+    timeout: 2000
+
+  - id: select_generate_tests
+    description: "Select generate tests command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_for_tests
+    description: "Wait for tests to be generated"
+    action: wait
+    args:
+      duration: 15000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify tests were generated and cover edge cases"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: select_all_code
+      name: "code-selected"
+    - atStep: wait_for_tests
+      name: "tests-generated"
+  storeChatTranscript: true
+  storeLogs: true

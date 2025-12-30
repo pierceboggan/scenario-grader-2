@@ -1,0 +1,95 @@
+id: smart-action-fix-terminal-error
+name: "Fix Terminal Errors with AI"
+owner: "@copilot-team"
+tags: [copilot, smart-actions, terminal, debugging]
+priority: P1
+
+description: >
+  Tests the AI-powered terminal error fix feature. When a command
+  fails in the terminal, VS Code shows a sparkle icon to explain
+  what happened and suggest fixes.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_terminal
+    description: "Open the integrated terminal"
+    action: pressKey
+    args:
+      key: Meta+`
+    timeout: 3000
+
+  - id: wait_terminal
+    description: "Wait for terminal to open"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: run_failing_command
+    description: "Run a command that will fail"
+    action: runTerminalCommand
+    args:
+      command: "npm run nonexistent-script"
+    timeout: 5000
+
+  - id: wait_for_error
+    description: "Wait for command to fail"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: explain_error
+    description: "Use Copilot to explain the error"
+    action: openCommandPalette
+    timeout: 2000
+
+  - id: explain_terminal_command
+    description: "Type explain terminal command"
+    action: typeText
+    args:
+      text: "Terminal: Explain Terminal"
+    timeout: 2000
+
+  - id: select_explain
+    description: "Select explain command"
+    action: pressKey
+    args:
+      key: Enter
+    timeout: 5000
+
+  - id: wait_explanation
+    description: "Wait for explanation"
+    action: wait
+    args:
+      duration: 10000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=75"
+    required: false
+    description: "Verify AI explained the terminal error correctly"
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_for_error
+      name: "terminal-error"
+    - atStep: wait_explanation
+      name: "error-explanation"
+  storeChatTranscript: true
+  storeLogs: true
