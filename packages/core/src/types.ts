@@ -99,40 +99,33 @@ export type Outputs = z.infer<typeof OutputsSchema>;
 export const ScenarioSchema = z.object({
   id: z.string(),
   name: z.string(),
-  owner: z.string(),
-  tags: z.array(z.string()).default([]),
   description: z.string(),
   priority: PrioritySchema,
-  environment: EnvironmentSchema,
-  preconditions: z.array(z.string()).default([]),
+  version: z.string().optional(),
+  author: z.string().optional(),
+  owner: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  environment: EnvironmentSchema.optional(),
+  preconditions: z.array(z.string()).optional(),
   steps: z.array(StepSchema),
-  assertions: z.array(AssertionSchema).default([]),
+  assertions: z.array(AssertionSchema).optional(),
   outputs: OutputsSchema.optional(),
 });
 export type Scenario = z.infer<typeof ScenarioSchema>;
 
 // ============================================================================
-// Run & Execution Types
+// Run Status Types
 // ============================================================================
 
-export const RunStatusSchema = z.enum([
-  'pending',
-  'running',
-  'passed',
-  'failed',
-  'cancelled',
-  'error',
-]);
-export type RunStatus = z.infer<typeof RunStatusSchema>;
+export type RunStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error' | 'skipped';
 
-export const StepStatusSchema = z.enum([
-  'pending',
-  'running',
-  'passed',
-  'failed',
-  'skipped',
-]);
-export type StepStatus = z.infer<typeof StepStatusSchema>;
+export type StepStatus = 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+
+export type AssertionStatus = 'pending' | 'passed' | 'failed';
+
+// ============================================================================
+// Result Types
+// ============================================================================
 
 export interface StepResult {
   stepId: string;
@@ -142,7 +135,7 @@ export interface StepResult {
   duration?: number;
   error?: string;
   screenshot?: string;
-  logs: string[];
+  logs?: string[];
 }
 
 export interface AssertionResult {
@@ -158,9 +151,10 @@ export interface AssertionResult {
 // ============================================================================
 
 export interface EvaluationDimension {
-  id: string;
+  id?: string;
   name: string;
-  score: number; // 1-5
+  score: number;
+  maxScore?: number;
   feedback: string;
 }
 

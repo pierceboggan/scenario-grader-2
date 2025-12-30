@@ -1,279 +1,274 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import Table from 'cli-table3';
-import boxen from 'boxen';
-import {
-  getAllSampleScenarios,
-  getSampleScenario,
-  runScenario,
-  RunEvent,
-  RunConfig,
-  RunReport,
-  Scenario,
-} from '@scenario-grader/core';
+import fs from 'fs';
+import path from 'path';
+import { parseScenarioFile, runScenario, RunConfig, Scenario, evaluateScenarioRun } from '@scenario-grader/core';
 
 interface RunOptions {
-  all?: boolean;
-  tag?: string;
-  vscodeVersion: string;
+  vscodeVersion?: string;
   profile?: string;
-  sandboxReset: boolean;
-  llm: boolean;
-  artifacts: boolean;
-  watch?: boolean;
-  output?: string;
+  sandboxReset?: boolean;
+  llm?: boolean;
+  artifacts?: boolean;
   freshProfile?: boolean;
   video?: boolean;
+  watch?: boolean;
+  output?: string;
+  all?: boolean;
+  tag?: string;
 }
 
-export async function runCommand(
-  scenarioId: string | undefined,
-  options: RunOptions
-): Promise<void> {
-  const scenarios = getAllSampleScenarios();
-  let scenariosToRun: Scenario[] = [];
-
-  // Determine which scenarios to run
-  if (options.all) {
-    scenariosToRun = scenarios;
-  } else if (options.tag) {
-    scenariosToRun = scenarios.filter((s) => s.tags.includes(options.tag!));
-    if (scenariosToRun.length === 0) {
-      console.log(chalk.yellow(`No scenarios found with tag: ${options.tag}`));
-      return;
-    }
-  } else if (scenarioId) {
-    const scenario = getSampleScenario(scenarioId);
-    if (!scenario) {
-      console.log(chalk.red(`Scenario not found: ${scenarioId}`));
-      console.log(chalk.gray('Use "scenario-runner list" to see available scenarios'));
-      return;
-    }
-    scenariosToRun = [scenario];
-  } else {
-    console.log(chalk.yellow('Please specify a scenario ID, --all, or --tag'));
-    console.log(chalk.gray('Use "scenario-runner list" to see available scenarios'));
-    return;
-  }
-
-  console.log(
-    chalk.blue(`\n📋 Running ${scenariosToRun.length} scenario(s)\n`)
-  );
-
-  const results: RunReport[] = [];
-
-  for (const scenario of scenariosToRun) {
-    const report = await runSingleScenario(scenario, options);
-    results.push(report);
-  }
-
-  // Summary
-  printSummary(results);
-}
-
-async function runSingleScenario(
-  scenario: Scenario,
-  options: RunOptions
-): Promise<RunReport> {
-  console.log(
-    boxen(
-      `${chalk.bold(scenario.name)}\n${chalk.gray(scenario.id)}\n${chalk.cyan(scenario.priority)} • ${scenario.tags.map((t) => chalk.magenta(`#${t}`)).join(' ')}`,
-      {
-        padding: 1,
-        margin: { top: 0, bottom: 1, left: 0, right: 0 },
-        borderStyle: 'round',
-        borderColor: 'cyan',
-      }
-    )
-  );
-
-  const spinner = ora('Initializing...').start();
-  let currentStep = '';
-  const logs: string[] = [];
-
-  const config: RunConfig = {
-    scenarioId: scenario.id,
-    vscodeVersion: options.vscodeVersion as any,
-    profileName: options.profile,
-    resetSandbox: options.sandboxReset,
-    captureArtifacts: options.artifacts,
-    enableLLMGrading: options.llm,
-    freshProfile: options.freshProfile ?? false, // Default: reuse existing profile
-    recordVideo: options.video ?? false,
-    // Auth credentials from environment (SCENARIO_GITHUB_EMAIL, SCENARIO_GITHUB_PASSWORD)
-    auth: {
-      email: process.env.SCENARIO_GITHUB_EMAIL,
-      password: process.env.SCENARIO_GITHUB_PASSWORD,
-    },
-  };
-
-  const handleEvent = (event: RunEvent) => {
-    switch (event.type) {
-      case 'run:start':
-        spinner.text = 'Starting run...';
-        break;
-      case 'step:start':
-        currentStep = event.data.stepId;
-        spinner.text = `Step: ${event.data.stepId} - ${event.data.action}`;
-        break;
-      case 'step:complete':
-        const stepStatus = event.data.status === 'passed'
-          ? chalk.green('✓')
-          : chalk.red('✗');
-        console.log(`  ${stepStatus} ${event.data.stepId} (${event.data.duration}ms)`);
-        break;
-      case 'log':
-        logs.push(event.data.message);
-        break;
-      case 'assertion:start':
-        spinner.text = `Assertion: ${event.data.assertionId}`;
-        break;
-      case 'assertion:complete':
-        const assertStatus = event.data.passed
-          ? chalk.green('✓')
-          : chalk.red('✗');
-        console.log(`  ${assertStatus} Assertion: ${event.data.assertionId}`);
-        break;
-      case 'evaluation:start':
-        spinner.text = 'Running LLM evaluation...';
-        break;
-      case 'evaluation:complete':
-        spinner.succeed('LLM evaluation complete');
-        break;
-      case 'error':
-        spinner.fail(`Error: ${event.data.error}`);
-        break;
-    }
-  };
-
+/**
+ * CLI action handler for running scenarios
+ */
+export async function runCommand(scenarioId: string | undefined, options: RunOptions): Promise<void> {
+  const spinner = ora('Loading scenario...').start();
+  
   try {
-    const report = await runScenario(scenario, config, handleEvent);
-
-    if (report.status === 'passed') {
-      spinner.succeed(chalk.green(`Scenario passed in ${report.duration}ms`));
+    // Handle --all flag
+    if (options.all) {
+      await runAllScenarios(options);
+      return;
+    }
+    
+    if (!scenarioId) {
+      spinner.fail('Please specify a scenario ID or use --all to run all scenarios');
+      process.exit(1);
+    }
+    
+    // Resolve scenario
+    let scenario: Scenario;
+    
+    if (scenarioId.endsWith('.yaml') || scenarioId.endsWith('.yml')) {
+      // Load from file
+      const filePath = path.resolve(scenarioId);
+      if (!fs.existsSync(filePath)) {
+        spinner.fail(`Scenario file not found: ${filePath}`);
+        process.exit(1);
+      }
+      scenario = parseScenarioFile(filePath);
     } else {
-      spinner.fail(chalk.red(`Scenario ${report.status}: ${report.error || 'Unknown error'}`));
-    }
-
-    // Print video path if recorded
-    if (report.artifacts?.video) {
-      console.log(chalk.cyan(`  📹 Video: ${report.artifacts.video}`));
-    }
-
-    // Print LLM evaluation if available
-    if (report.llmEvaluation) {
-      printLLMEvaluation(report);
-    }
-
-    return report;
-  } catch (error) {
-    spinner.fail(chalk.red(`Failed: ${error}`));
-    throw error;
-  }
-}
-
-function printLLMEvaluation(report: RunReport): void {
-  if (!report.llmEvaluation) return;
-
-  const eval_ = report.llmEvaluation;
-
-  console.log(
-    boxen(
-      `${chalk.bold('🤖 LLM Evaluation')}\n\n` +
-        `Overall Score: ${getScoreColor(eval_.overallScore)}${eval_.overallScore}/5${chalk.reset()}\n\n` +
-        `${chalk.bold('Dimensions:')}\n` +
-        eval_.dimensions
-          .map(
-            (d) =>
-              `  ${d.name}: ${getScoreColor(d.score)}${d.score}/5${chalk.reset()} - ${chalk.gray(d.feedback.slice(0, 50))}...`
-          )
-          .join('\n'),
-      {
-        padding: 1,
-        margin: { top: 1, bottom: 0, left: 2, right: 0 },
-        borderStyle: 'round',
-        borderColor: 'yellow',
+      // Look for scenario by ID in default location
+      const scenariosDir = path.join(process.cwd(), 'scenarios');
+      if (!fs.existsSync(scenariosDir)) {
+        spinner.fail(`Scenarios directory not found: ${scenariosDir}`);
+        process.exit(1);
       }
-    )
-  );
-
-  if (eval_.suggestions.length > 0) {
-    console.log(chalk.bold.yellow('\n  💡 Suggestions:\n'));
-    eval_.suggestions.forEach((s, i) => {
-      const severityColor =
-        s.severity === 'critical'
-          ? chalk.red
-          : s.severity === 'high'
-            ? chalk.yellow
-            : s.severity === 'medium'
-              ? chalk.blue
-              : chalk.gray;
-      console.log(
-        `    ${i + 1}. ${severityColor(`[${s.severity.toUpperCase()}]`)} ${chalk.white(s.title)}`
-      );
-      console.log(chalk.gray(`       ${s.description.slice(0, 80)}...`));
-      console.log(
-        chalk.cyan(`       Labels: ${s.labels.join(', ')}\n`)
-      );
+      
+      const files = fs.readdirSync(scenariosDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+      
+      let found: Scenario | null = null;
+      for (const file of files) {
+        const s = parseScenarioFile(path.join(scenariosDir, file));
+        if (s.id === scenarioId || file.replace(/\.ya?ml$/, '') === scenarioId) {
+          found = s;
+          break;
+        }
+      }
+      
+      if (!found) {
+        spinner.fail(`Scenario not found: ${scenarioId}`);
+        process.exit(1);
+      }
+      scenario = found;
+    }
+    
+    spinner.succeed(`Loaded scenario: ${chalk.cyan(scenario.name)}`);
+    
+    // Build run configuration
+    const config: RunConfig = {
+      scenarioId: scenario.id,
+      vscodeVersion: (options.vscodeVersion as 'stable' | 'insiders' | 'exploration') || 'stable',
+      resetSandbox: options.sandboxReset !== false,
+      captureArtifacts: options.artifacts !== false,
+      enableLLMGrading: options.llm !== false, // Enabled by default, use --no-llm to disable
+      freshProfile: options.freshProfile || false,
+      recordVideo: options.video || false,
+    };
+    
+    console.log('');
+    console.log(chalk.dim('─'.repeat(60)));
+    console.log(chalk.bold('Scenario Configuration'));
+    console.log(chalk.dim('─'.repeat(60)));
+    console.log(`  ${chalk.gray('ID:')}         ${scenario.id}`);
+    console.log(`  ${chalk.gray('Name:')}       ${scenario.name}`);
+    console.log(`  ${chalk.gray('Priority:')}   ${getPriorityBadge(scenario.priority)}`);
+    console.log(`  ${chalk.gray('Steps:')}      ${scenario.steps.length}`);
+    console.log(`  ${chalk.gray('VS Code:')}    ${config.vscodeVersion}`);
+    console.log(`  ${chalk.gray('Fresh:')}      ${config.freshProfile ? chalk.green('Yes') : chalk.gray('No')}`);
+    console.log(`  ${chalk.gray('Video:')}      ${config.recordVideo ? chalk.green('Yes') : chalk.gray('No')}`);
+    console.log(`  ${chalk.gray('LLM Eval:')}   ${config.enableLLMGrading ? chalk.green('Yes') : chalk.gray('No')}`);
+    console.log(chalk.dim('─'.repeat(60)));
+    console.log('');
+    
+    const runSpinner = ora('Executing scenario...').start();
+    
+    // Run the scenario
+    const report = await runScenario(scenario, config, (event) => {
+      switch (event.type) {
+        case 'step:start':
+          runSpinner.text = `Step: ${event.data.description}`;
+          break;
+        case 'step:complete':
+          if (event.data.status === 'passed') {
+            runSpinner.succeed(`${chalk.green('✓')} ${event.data.stepId}`);
+          } else {
+            runSpinner.fail(`${chalk.red('✗')} ${event.data.stepId}: ${event.data.error || 'Failed'}`);
+          }
+          runSpinner.start();
+          break;
+        case 'log':
+          // Could show verbose logs here
+          break;
+        case 'screenshot':
+          runSpinner.text = `Screenshot: ${event.data.path}`;
+          break;
+      }
     });
+    
+    runSpinner.stop();
+    console.log('');
+    
+    // Run LLM evaluation if enabled AND scenario completed successfully
+    if (config.enableLLMGrading && report.status === 'passed') {
+      const evalSpinner = ora('Running LLM evaluation with GPT-5.2...').start();
+      try {
+        const evaluation = await evaluateScenarioRun(scenario, report);
+        report.llmEvaluation = evaluation;
+        evalSpinner.succeed('LLM evaluation complete');
+      } catch (err) {
+        evalSpinner.warn(`LLM evaluation failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (config.enableLLMGrading && report.status !== 'passed') {
+      console.log(chalk.yellow(`  ⏭ Skipping LLM evaluation (scenario ${report.status})`));
+    }
+    
+    // Print results
+    console.log(chalk.dim('═'.repeat(60)));
+    console.log(chalk.bold('  Run Results'));
+    console.log(chalk.dim('═'.repeat(60)));
+    console.log('');
+    
+    const statusColor = report.status === 'passed' ? chalk.green : 
+                       report.status === 'failed' ? chalk.red : 
+                       chalk.yellow;
+    
+    console.log(`  ${chalk.gray('Status:')}    ${statusColor(report.status.toUpperCase())}`);
+    console.log(`  ${chalk.gray('Duration:')}  ${report.duration ? `${(report.duration / 1000).toFixed(2)}s` : 'N/A'}`);
+    console.log(`  ${chalk.gray('Run ID:')}    ${chalk.dim(report.id)}`);
+    console.log('');
+    
+    // Steps summary
+    const passedSteps = report.steps.filter(s => s.status === 'passed').length;
+    const failedSteps = report.steps.filter(s => s.status === 'failed').length;
+    
+    console.log(chalk.bold('  Steps:'));
+    console.log(`    ${chalk.green('Passed:')} ${passedSteps}  ${chalk.red('Failed:')} ${failedSteps}`);
+    console.log('');
+    
+    // Show failed steps
+    if (failedSteps > 0) {
+      console.log(chalk.bold('  Failed Steps:'));
+      for (const step of report.steps.filter(s => s.status === 'failed')) {
+        console.log(`    ${chalk.red('✗')} ${step.stepId}`);
+        if (step.error) {
+          console.log(`      ${chalk.dim(step.error)}`);
+        }
+      }
+      console.log('');
+    }
+    
+    // Artifacts
+    console.log(chalk.bold('  Artifacts:'));
+    console.log(`    ${chalk.gray('Screenshots:')} ${report.artifacts.screenshots.length} captured`);
+    console.log(`    ${chalk.gray('Logs:')}        ${report.artifacts.logs}`);
+    if (report.artifacts.video) {
+      console.log(`    ${chalk.gray('Video:')}       ${report.artifacts.video}`);
+    }
+    console.log('');
+    
+    // LLM Evaluation
+    if (report.llmEvaluation) {
+      console.log(chalk.bold('  LLM Evaluation (GPT-5.2):'));
+      console.log(`    ${chalk.gray('Overall Score:')} ${getScoreColor(report.llmEvaluation.overallScore)}${report.llmEvaluation.overallScore}/100${chalk.reset('')}`);
+      
+      for (const dim of report.llmEvaluation.dimensions) {
+        const score = dim.score * 20; // Convert 1-5 to percentage
+        console.log(`    ${chalk.gray(dim.name + ':')} ${getScoreColor(score)}${dim.score}/5${chalk.reset('')} - ${chalk.dim(dim.feedback.substring(0, 50))}${dim.feedback.length > 50 ? '...' : ''}`);
+      }
+      
+      if (report.llmEvaluation.suggestions.length > 0) {
+        console.log('');
+        console.log(chalk.bold('  Suggestions:'));
+        for (const suggestion of report.llmEvaluation.suggestions.slice(0, 3)) {
+          const severityColor = suggestion.severity === 'critical' ? chalk.red :
+                               suggestion.severity === 'high' ? chalk.yellow :
+                               suggestion.severity === 'medium' ? chalk.cyan :
+                               chalk.gray;
+          console.log(`    ${severityColor('●')} ${suggestion.title}`);
+          console.log(`      ${chalk.dim(suggestion.description.substring(0, 80))}${suggestion.description.length > 80 ? '...' : ''}`);
+        }
+      }
+      console.log('');
+    }
+    
+    console.log(chalk.dim('═'.repeat(60)));
+    
+    // Save report if output specified
+    if (options.output) {
+      const reportPath = path.join(options.output, `${report.id}.json`);
+      fs.mkdirSync(options.output, { recursive: true });
+      fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+      console.log(chalk.green(`\nReport saved to: ${reportPath}`));
+    }
+    
+    // Exit code
+    process.exit(report.status === 'passed' ? 0 : 1);
+    
+  } catch (error) {
+    spinner.fail(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
   }
 }
 
-function getScoreColor(score: number): chalk.Chalk {
-  if (score >= 4) return chalk.green;
-  if (score >= 3) return chalk.yellow;
-  return chalk.red;
+async function runAllScenarios(options: RunOptions): Promise<void> {
+  const scenariosDir = path.join(process.cwd(), 'scenarios');
+  if (!fs.existsSync(scenariosDir)) {
+    console.log(chalk.red('Scenarios directory not found'));
+    process.exit(1);
+  }
+  
+  const files = fs.readdirSync(scenariosDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+  console.log(chalk.cyan(`Found ${files.length} scenarios to run\n`));
+  
+  for (const file of files) {
+    const scenario = parseScenarioFile(path.join(scenariosDir, file));
+    
+    // Filter by tag if specified
+    if (options.tag && !(scenario.tags || []).includes(options.tag)) {
+      continue;
+    }
+    
+    console.log(chalk.bold(`\n▶ Running: ${scenario.name}`));
+    await runCommand(scenario.id, { ...options, all: false });
+  }
 }
 
-function printSummary(results: RunReport[]): void {
-  const passed = results.filter((r) => r.status === 'passed').length;
-  const failed = results.filter((r) => r.status === 'failed').length;
-  const errors = results.filter((r) => r.status === 'error').length;
+function getPriorityBadge(priority: string): string {
+  switch (priority) {
+    case 'P0':
+      return chalk.bgRed.white(' P0 ');
+    case 'P1':
+      return chalk.bgYellow.black(' P1 ');
+    case 'P2':
+      return chalk.bgBlue.white(' P2 ');
+    default:
+      return chalk.gray(priority);
+  }
+}
 
-  console.log('\n');
-
-  const table = new Table({
-    head: [
-      chalk.white('Scenario'),
-      chalk.white('Status'),
-      chalk.white('Duration'),
-      chalk.white('LLM Score'),
-    ],
-    style: {
-      head: [],
-      border: ['gray'],
-    },
-  });
-
-  results.forEach((r) => {
-    const statusIcon =
-      r.status === 'passed'
-        ? chalk.green('✓ Passed')
-        : r.status === 'failed'
-          ? chalk.red('✗ Failed')
-          : chalk.yellow('⚠ Error');
-
-    const llmScore = r.llmEvaluation
-      ? `${r.llmEvaluation.overallScore}/5`
-      : chalk.gray('N/A');
-
-    table.push([r.scenarioName, statusIcon, `${r.duration}ms`, llmScore]);
-  });
-
-  console.log(table.toString());
-
-  const summaryColor = failed + errors > 0 ? chalk.red : chalk.green;
-  console.log(
-    boxen(
-      summaryColor.bold(
-        `${passed} passed, ${failed} failed, ${errors} errors`
-      ),
-      {
-        padding: { top: 0, bottom: 0, left: 2, right: 2 },
-        margin: { top: 1, bottom: 1, left: 0, right: 0 },
-        borderStyle: 'round',
-        borderColor: failed + errors > 0 ? 'red' : 'green',
-      }
-    )
-  );
+function getScoreColor(score: number): string {
+  if (score >= 80) return chalk.green('');
+  if (score >= 60) return chalk.yellow('');
+  return chalk.red('');
 }

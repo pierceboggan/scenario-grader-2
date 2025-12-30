@@ -1,5 +1,6 @@
 import {
   Scenario,
+  Assertion,
   RunConfig,
   RunReport,
   RunStatus,
@@ -162,7 +163,7 @@ async function launchVSCode(
   }
 
   // Add workspace if specified
-  if (scenario.environment.workspacePath) {
+  if (scenario.environment?.workspacePath) {
     const workspacePath = scenario.environment.workspacePath.replace(/^~/, os.homedir());
     if (fs.existsSync(workspacePath)) {
       args.push(workspacePath);
@@ -286,13 +287,6 @@ function getAuthFromEnv(): AuthConfig {
 
 /**
  * Perform GitHub login for Copilot authentication
- * 
- * This handles the VS Code -> Browser OAuth flow:
- * 1. Use keyboard navigation to select "Continue with GitHub" in VS Code sign-in dialog
- * 2. VS Code opens browser to github.com/login/device
- * 3. We automate the browser login with provided credentials
- * 4. Authorize the VS Code app
- * 5. Return to VS Code which should now be authenticated
  */
 async function performGitHubLogin(
   vscodePage: Page,
@@ -310,84 +304,59 @@ async function performGitHubLogin(
   
   log('Starting GitHub authentication flow via keyboard navigation...');
   
-  // The sign-in dialog has focus and shows:
-  // - "Continue with GitHub" (first/focused button)
-  // - "Continue with Google"
-  // - "Continue with Apple"
-  // - "Continue with GHE.com"
-  // - "Skip for now"
-  
-  // The "Continue with GitHub" button should be the first/default button
-  // Just press Enter to activate it
   log('Pressing Enter to select "Continue with GitHub"...');
   await vscodePage.keyboard.press('Enter');
   await vscodePage.waitForTimeout(2000);
   
-  // VS Code may show a dialog asking to open external URL
-  // This is a VS Code modal dialog, try pressing Enter again to confirm
   log('Checking for external URL confirmation dialog...');
   
-  // Take a screenshot to see what's happening
   const screenshotPath = `${ctx.artifactsPath}/screenshots/auth_dialog.png`;
   await vscodePage.screenshot({ path: screenshotPath });
   log(`Auth dialog screenshot: ${screenshotPath}`);
   
-  // Try pressing Enter to confirm any "Open" dialog
   await vscodePage.keyboard.press('Enter');
   await vscodePage.waitForTimeout(3000);
   
-  // Now we need to automate the browser that VS Code opened
-  // VS Code opens the default browser, we'll launch our own Playwright browser
-  // to navigate to GitHub and complete the auth flow
   log('Launching browser for GitHub authentication...');
   
   let browser: Browser | undefined;
   try {
-    // Launch browser with visible window for OAuth flow
     browser = await chromium.launch({
-      headless: false, // Must be visible for OAuth
-      channel: 'chrome', // Use system Chrome if available
+      headless: false,
+      channel: 'chrome',
     });
     
     const browserContext = await browser.newContext();
     const browserPage = await browserContext.newPage();
     
-    // Navigate to GitHub login
     log('Navigating to GitHub login...');
     await browserPage.goto('https://github.com/login');
     await browserPage.waitForLoadState('networkidle');
     
-    // Check if already logged in (redirected to home or other page)
     const currentUrl = browserPage.url();
     if (!currentUrl.includes('/login')) {
       log('Already logged into GitHub, proceeding to device authorization...');
     } else {
-      // Fill in credentials
       log('Entering GitHub credentials...');
       await browserPage.fill('#login_field', auth.email);
       await browserPage.fill('#password', auth.password);
       await browserPage.click('input[type="submit"]');
       
-      // Wait for login to complete
       await browserPage.waitForLoadState('networkidle');
       await browserPage.waitForTimeout(2000);
       
-      // Check for 2FA - this would require additional handling
       const twoFactorField = await browserPage.$('#app_totp');
       if (twoFactorField) {
         log('⚠️  Two-factor authentication required. Please complete 2FA manually.');
-        // Wait longer for manual 2FA
         await browserPage.waitForTimeout(30000);
       }
     }
     
-    // Now go to GitHub device activation page (VS Code uses device flow)
     log('Checking for device authorization...');
     await browserPage.goto('https://github.com/login/device');
     await browserPage.waitForLoadState('networkidle');
     await browserPage.waitForTimeout(1000);
     
-    // Look for authorize button
     const authorizeBtn = await browserPage.$('button[type="submit"]:has-text("Authorize")');
     if (authorizeBtn) {
       log('Clicking Authorize button...');
@@ -396,7 +365,6 @@ async function performGitHubLogin(
       await browserPage.waitForTimeout(2000);
     }
     
-    // Check for success message
     const successText = await browserPage.textContent('body');
     if (successText?.includes('successfully') || successText?.includes('authorized') || successText?.includes('Congratulations')) {
       log('✅ GitHub authorization successful!');
@@ -404,15 +372,12 @@ async function performGitHubLogin(
       log('Authorization page reached. Please check VS Code for confirmation.');
     }
     
-    // Close browser
     await browser.close();
     browser = undefined;
     
-    // Return to VS Code and wait for it to pick up the auth
     log('Returning to VS Code...');
     await vscodePage.waitForTimeout(3000);
     
-    // Check if Copilot is now available
     log('GitHub authentication flow completed. Copilot should now be available.');
     
   } catch (err) {
@@ -498,7 +463,6 @@ async function executeStep(
     
     switch (step.action) {
       case 'launchVSCodeWithProfile':
-        // Already launched
         log('VS Code already launched');
         break;
         
@@ -513,8 +477,6 @@ async function executeStep(
         await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+I' : 'Control+Shift+I');
         await page.waitForTimeout(2000);
         
-        // Check if sign-in dialog appeared by taking a screenshot and checking visually
-        // The sign-in dialog shows "Sign in to use AI Features"
         const pageContent = await page.content();
         const needsAuth = pageContent.includes('Sign in to use AI Features') || 
                           pageContent.includes('Continue with GitHub');
@@ -630,7 +592,6 @@ async function executeStep(
       case 'configureMCPServer':
       case 'openMCPPanel':
         log(`MCP action: ${step.action}`);
-        // Open command palette and search for MCP
         await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
         await page.waitForTimeout(500);
         await page.keyboard.type('MCP', { delay: 30 });
@@ -654,7 +615,6 @@ async function executeStep(
         break;
         
       case 'signInWithGitHub':
-        // Alias for githubLogin
         await performGitHubLogin(page, ctx, log);
         break;
         
@@ -684,7 +644,6 @@ async function executeStep(
     error = err instanceof Error ? err.message : String(err);
     log(`FAILED: ${error}`);
     
-    // Failure screenshot
     try {
       const failPath = path.join(ctx.artifactsPath, 'screenshots', `FAIL_${step.id}.png`);
       await ctx.page.screenshot({ path: failPath, fullPage: true });
@@ -722,7 +681,7 @@ async function executeStep(
  * Execute an assertion
  */
 async function executeAssertion(
-  assertion: Scenario['assertions'][0],
+  assertion: Assertion,
   ctx: VSCodeContext,
   emit: RunEventHandler
 ): Promise<AssertionResult> {
@@ -775,7 +734,6 @@ async function executeAssertion(
         break;
         
       case 'llmGrade':
-        // LLM evaluation disabled for now
         passed = true;
         actual = 'LLM evaluation skipped';
         break;
@@ -833,14 +791,12 @@ export async function runScenario(
   let ctx: VSCodeContext | undefined;
   
   try {
-    // Launch VS Code (defaults to existing profile for already-authenticated scenarios)
     ctx = await launchVSCode(scenario, runId, emit, { 
       freshProfile: config.freshProfile ?? false,
       recordVideo: config.recordVideo ?? false,
       auth: config.auth,
     });
     
-    // Execute steps
     for (const step of scenario.steps) {
       const result = await executeStep(step, ctx, emit);
       stepResults.push(result);
@@ -849,7 +805,6 @@ export async function runScenario(
         screenshots.push(result.screenshot);
       }
       
-      // Stop on required step failure
       if (result.status === 'failed' && !step.optional) {
         status = 'failed';
         error = result.error;
@@ -857,9 +812,8 @@ export async function runScenario(
       }
     }
     
-    // Execute assertions if all steps passed
     if (status === 'running') {
-      for (const assertion of scenario.assertions) {
+      for (const assertion of scenario.assertions || []) {
         const result = await executeAssertion(assertion, ctx, emit);
         assertionResults.push(result);
         
@@ -871,7 +825,6 @@ export async function runScenario(
       }
     }
     
-    // Final status
     if (status === 'running') {
       status = 'passed';
     }
@@ -879,7 +832,6 @@ export async function runScenario(
     status = 'error';
     const errMsg = err instanceof Error ? err.message : 'Unknown error';
     
-    // Provide helpful error message for common VS Code conflict
     if (errMsg.includes('Target page, context or browser has been closed')) {
       error = 'VS Code closed unexpectedly. This usually happens when another VS Code instance is running with the same profile. Try using --fresh flag for isolated runs, or close other VS Code windows.';
     } else {
@@ -892,7 +844,6 @@ export async function runScenario(
       data: { error },
     });
   } finally {
-    // Cleanup - close VS Code
     if (ctx) {
       emit({
         type: 'log',
@@ -900,7 +851,6 @@ export async function runScenario(
         data: { message: 'Closing VS Code...' },
       });
       try {
-        // Save video path before closing (Playwright saves video on close)
         if (ctx.videoPath) {
           const video = ctx.page.video();
           if (video) {
@@ -909,7 +859,6 @@ export async function runScenario(
         }
         await ctx.app.close();
         
-        // Log video path if recorded
         if (videoPath && fs.existsSync(videoPath)) {
           emit({
             type: 'log',
@@ -926,7 +875,6 @@ export async function runScenario(
   const endTime = new Date().toISOString();
   const artifactsPath = ctx?.artifactsPath || '';
   
-  // Build report
   const report: RunReport = {
     id: runId,
     scenarioId: scenario.id,
@@ -935,7 +883,12 @@ export async function runScenario(
     startTime,
     endTime,
     duration: new Date(endTime).getTime() - new Date(startTime).getTime(),
-    environment: scenario.environment,
+    environment: scenario.environment || {
+      vscodeTarget: 'desktop',
+      vscodeVersion: 'stable',
+      platform: 'macOS',
+      copilotChannel: 'stable',
+    },
     steps: stepResults,
     assertions: assertionResults,
     artifacts: {
@@ -947,7 +900,6 @@ export async function runScenario(
     error,
   };
   
-  // LLM evaluation disabled for now
   if (config.enableLLMGrading) {
     emit({
       type: 'log',
@@ -962,7 +914,6 @@ export async function runScenario(
     data: report,
   });
   
-  // Log summary
   emit({
     type: 'log',
     timestamp: new Date().toISOString(),

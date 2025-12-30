@@ -1,4 +1,5 @@
 import yaml from 'yaml';
+import fs from 'fs';
 import { ScenarioSchema, Scenario } from './types';
 
 /**
@@ -7,6 +8,14 @@ import { ScenarioSchema, Scenario } from './types';
 export function parseScenarioYAML(yamlContent: string): Scenario {
   const parsed = yaml.parse(yamlContent);
   return ScenarioSchema.parse(parsed);
+}
+
+/**
+ * Load and parse a scenario from a YAML file
+ */
+export function parseScenarioFile(filePath: string): Scenario {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return parseScenarioYAML(content);
 }
 
 /**

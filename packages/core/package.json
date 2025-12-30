@@ -22,15 +22,16 @@
     "dev": "tsup src/index.ts src/browser.ts --format cjs,esm --dts --watch"
   },
   "dependencies": {
-    "yaml": "^2.3.4",
-    "zod": "^3.22.4",
-    "nanoid": "^5.0.4",
     "date-fns": "^3.0.6",
-    "playwright": "^1.40.0"
+    "nanoid": "^5.0.4",
+    "openai": "^6.15.0",
+    "playwright": "^1.40.0",
+    "yaml": "^2.3.4",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/node": "^20.10.0",
     "tsup": "^8.0.1",
-    "typescript": "^5.3.0",
-    "@types/node": "^20.10.0"
+    "typescript": "^5.3.0"
   }
 }

@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
-import { getAllSampleScenarios, Scenario, Priority } from '@scenario-grader/core';
+import { getAllSampleScenarios, Priority } from '@scenario-grader/core';
 
 interface ListOptions {
   tag?: string;

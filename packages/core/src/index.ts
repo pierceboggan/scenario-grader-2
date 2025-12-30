@@ -2,7 +2,7 @@
 export * from './types';
 
 // Parser & Validation
-export { parseScenarioYAML, scenarioToYAML, validateScenario, patchScenario } from './parser';
+export { parseScenarioYAML, parseScenarioFile, scenarioToYAML, validateScenario, patchScenario } from './parser';
 
 // Natural Language Compiler
 export { compileNaturalLanguage, generateScenarioDiff } from './compiler';
@@ -11,7 +11,12 @@ export { compileNaturalLanguage, generateScenarioDiff } from './compiler';
 export { runScenario, resetSandbox, cleanupRun, type RunEvent, type RunEventHandler, type RunEventType } from './runner';
 
 // LLM Evaluator
-export { evaluateScenarioRun, generateEvaluationPrompt } from './evaluator';
+export { 
+  evaluateScenarioRun, 
+  generateEvaluationPrompt, 
+  getEvaluationDimensions,
+  type EvaluatorConfig 
+} from './evaluator';
 
 // GitHub Integration
 export {
