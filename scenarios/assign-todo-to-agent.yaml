@@ -1,0 +1,87 @@
+id: assign-todo-to-agent
+name: "Assign TODO Comment to Coding Agent"
+owner: "@copilot-team"
+tags: [copilot, agents, cloud, todo, automation]
+priority: P1
+
+description: >
+  Test assigning TODO comments in code to Copilot coding agent for 
+  implementation. The agent creates a cloud session to implement the TODO.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "GitHub Pull Requests extension installed"
+  - "User authenticated to GitHub"
+
+steps:
+  - id: open_file
+    description: "Open a source file"
+    action: openFile
+    args:
+      path: "src/index.ts"
+    timeout: 3000
+
+  - id: add_todo
+    description: "Add a TODO comment"
+    action: typeText
+    args:
+      text: "// TODO: Add input validation for user data"
+    timeout: 2000
+
+  - id: hover_todo
+    description: "Hover over the TODO comment"
+    action: hover
+    args:
+      target: "TODO"
+    timeout: 2000
+
+  - id: assign_copilot
+    description: "Click the code action to assign TODO to Copilot"
+    action: click
+    args:
+      target: "Assign to Copilot"
+    timeout: 3000
+
+  - id: wait_start
+    description: "Wait for cloud agent session to start"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 3000
+
+  - id: filter_cloud
+    description: "Filter to cloud agent sessions"
+    action: click
+    args:
+      target: "Cloud Agents"
+    timeout: 2000
+
+  - id: view_session
+    description: "View the session working on the TODO"
+    action: click
+    args:
+      target: "TODO session"
+    timeout: 3000
+
+assertions:
+  - id: llm_todo_assign
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that TODO comments in code can be assigned to Copilot coding agent. The agent should create a cloud session to implement the TODO and create a pull request."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: view_session
+      name: "assign-todo-final"
+  storeLogs: true

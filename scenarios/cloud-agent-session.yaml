@@ -1,0 +1,95 @@
+id: cloud-agent-session
+name: "Create Cloud Agent Session"
+owner: "@copilot-team"
+tags: [copilot, agents, cloud, github, pull-request, collaboration]
+priority: P0
+
+description: >
+  Test creating a cloud agent session with GitHub Copilot coding agent 
+  for remote task execution and PR creation. Cloud agents run on remote
+  infrastructure and integrate with GitHub repositories.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Project connected to a GitHub repository"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_cloud
+    description: "Search for cloud agent command"
+    action: typeText
+    args:
+      text: "Chat: New Cloud Agent"
+    timeout: 2000
+
+  - id: create_session
+    description: "Create new cloud agent session"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: wait_init
+    description: "Wait for cloud agent session to initialize"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: enter_task
+    description: "Enter task for cloud agent"
+    action: sendChatMessage
+    args:
+      message: "Add comprehensive JSDoc comments to all exported functions in the codebase"
+      waitForResponse: false
+    timeout: 5000
+
+  - id: wait_start
+    description: "Wait for cloud agent to start working"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: view_sessions
+    description: "View session in sessions list"
+    action: click
+    args:
+      target: "Sessions"
+    timeout: 3000
+
+  - id: filter_cloud
+    description: "Filter to show only cloud agent sessions"
+    action: click
+    args:
+      target: "Cloud Agents"
+    timeout: 2000
+
+assertions:
+  - id: llm_cloud_agent
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that a cloud agent session was created successfully. The cloud agent should start working on the task remotely and create a branch/pull request in the GitHub repository for team collaboration."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: filter_cloud
+      name: "cloud-agent-final"
+  storeLogs: true

@@ -1,0 +1,101 @@
+id: checkout-cloud-pr
+name: "Checkout Cloud Agent Pull Request Locally"
+owner: "@copilot-team"
+tags: [copilot, agents, cloud, github, pull-request, checkout]
+priority: P1
+
+description: >
+  Test checking out a pull request created by cloud agent for local 
+  review and testing. Enables verifying changes before merging.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub"
+  - "Cloud agent session with PR exists"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: show_all
+    description: "Open full sessions list"
+    action: click
+    args:
+      target: "Show All Sessions"
+    timeout: 3000
+
+  - id: filter_cloud
+    description: "Filter to cloud agent sessions"
+    action: click
+    args:
+      target: "Cloud Agents"
+    timeout: 2000
+
+  - id: context_session
+    description: "Right-click on a completed cloud agent session"
+    action: rightClick
+    args:
+      target: "Completed cloud session"
+    timeout: 2000
+
+  - id: checkout_pr
+    description: "Check out the PR branch locally"
+    action: click
+    args:
+      target: "Checkout Pull Request"
+    timeout: 5000
+
+  - id: wait_checkout
+    description: "Wait for branch checkout"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: open_scm
+    description: "Open Source Control view"
+    action: keyboardShortcut
+    args:
+      keys: ["ctrl+shift+g"]
+    timeout: 3000
+
+  - id: verify_branch
+    description: "Verify current branch is the PR branch"
+    action: click
+    args:
+      target: "Branch name"
+    timeout: 2000
+
+  - id: open_file
+    description: "Open a file changed by cloud agent"
+    action: openFile
+    args:
+      path: "changed-file.ts"
+    timeout: 3000
+
+  - id: run_tests
+    description: "Run and test the changes locally"
+    action: keyboardShortcut
+    args:
+      keys: ["F5"]
+    timeout: 5000
+
+assertions:
+  - id: llm_checkout_pr
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that pull requests created by cloud agents can be checked out locally for review and testing. The branch should be available in Source Control for inspection."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: run_tests
+      name: "checkout-pr-final"
+  storeLogs: true

@@ -1,0 +1,100 @@
+id: side-by-side-sessions
+name: "Side-by-Side Sessions View Mode"
+owner: "@copilot-team"
+tags: [copilot, agents, sessions, views, layout]
+priority: P1
+
+description: >
+  Test the side-by-side sessions view mode for managing multiple agent 
+  sessions simultaneously. Validates view mode switching.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Multiple agent sessions exist"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: resize_view
+    description: "Make Chat view wider to trigger side-by-side mode"
+    action: drag
+    args:
+      target: "Chat view edge"
+      direction: "right"
+    timeout: 2000
+
+  - id: wait_switch
+    description: "Wait for view to switch to side-by-side mode"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: toggle_mode
+    description: "Use toggle button to switch between compact and side-by-side"
+    action: click
+    args:
+      target: "Toggle view mode"
+    timeout: 2000
+
+  - id: select_local
+    description: "Select a local session from the list"
+    action: click
+    args:
+      target: "Local session"
+    timeout: 2000
+
+  - id: wait_details
+    description: "View session details"
+    action: wait
+    args:
+      duration: 500
+
+  - id: select_background
+    description: "Select a background session from the list"
+    action: click
+    args:
+      target: "Background session"
+    timeout: 2000
+
+  - id: wait_bg_details
+    description: "View different session details"
+    action: wait
+    args:
+      duration: 500
+
+  - id: context_session
+    description: "Right-click on a session"
+    action: rightClick
+    args:
+      target: "Session"
+    timeout: 2000
+
+  - id: change_orientation
+    description: "Change default orientation setting"
+    action: click
+    args:
+      target: "Sessions Orientation"
+    timeout: 2000
+
+assertions:
+  - id: llm_side_by_side
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that the Chat view supports side-by-side mode showing the session list alongside session details. Users should be able to toggle between compact and side-by-side modes."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: change_orientation
+      name: "side-by-side-sessions-final"
+  storeLogs: true

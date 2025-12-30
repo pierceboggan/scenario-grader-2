@@ -1,0 +1,101 @@
+id: plan-agent-to-cloud
+name: "Plan Agent to Cloud Implementation"
+owner: "@copilot-team"
+tags: [copilot, agents, plan, cloud, delegation, github]
+priority: P0
+
+description: >
+  Test using Plan agent to create implementation plan then delegating 
+  to cloud agent for remote execution with PR creation.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Project connected to GitHub repository"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_agents
+    description: "Open agents dropdown"
+    action: click
+    args:
+      target: "Agents"
+    timeout: 2000
+
+  - id: select_plan
+    description: "Select Plan agent"
+    action: click
+    args:
+      target: "Plan"
+    timeout: 2000
+
+  - id: request_plan
+    description: "Ask Plan agent to create implementation plan"
+    action: sendChatMessage
+    args:
+      message: "Create a plan to add user profile page with avatar upload and settings"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_plan
+    description: "Wait for plan to be generated"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: click_implement
+    description: "Open implementation options dropdown"
+    action: click
+    args:
+      target: "Start Implementation"
+    timeout: 3000
+
+  - id: select_cloud
+    description: "Hand off plan to cloud agent"
+    action: click
+    args:
+      target: "Continue in Cloud"
+    timeout: 3000
+
+  - id: wait_start
+    description: "Wait for cloud agent to start"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: view_sessions
+    description: "View cloud agent progress in sessions"
+    action: click
+    args:
+      target: "Sessions"
+    timeout: 3000
+
+  - id: filter_cloud
+    description: "Filter to cloud agent sessions"
+    action: click
+    args:
+      target: "Cloud Agents"
+    timeout: 2000
+
+assertions:
+  - id: llm_plan_cloud
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that Plan agent creates a structured implementation plan and can hand off to cloud agent for remote execution. The cloud agent should create a pull request on GitHub."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: filter_cloud
+      name: "plan-to-cloud-final"
+  storeLogs: true

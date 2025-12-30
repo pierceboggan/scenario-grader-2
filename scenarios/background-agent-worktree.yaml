@@ -1,0 +1,117 @@
+id: background-agent-worktree
+name: "Background Agent with Git Worktree Isolation"
+owner: "@copilot-team"
+tags: [copilot, agents, background, git, worktree, isolation]
+priority: P0
+
+description: >
+  Test creating an isolated background agent session using Git worktrees 
+  to prevent conflicts with main workspace. Changes are made in a separate
+  folder and can be reviewed before applying.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Git repository initialized"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_background
+    description: "Search for background agent command"
+    action: typeText
+    args:
+      text: "Chat: New Background Agent"
+    timeout: 2000
+
+  - id: create_session
+    description: "Create new background agent session"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: select_worktree
+    description: "Select worktree isolation mode instead of workspace"
+    action: click
+    args:
+      target: "Worktree"
+    timeout: 2000
+
+  - id: enter_task
+    description: "Enter refactoring task for isolated execution"
+    action: sendChatMessage
+    args:
+      message: "Refactor the main module to use dependency injection pattern"
+      waitForResponse: false
+    timeout: 5000
+
+  - id: wait_complete
+    description: "Wait for background agent to complete task in worktree"
+    action: wait
+    args:
+      duration: 30000
+
+  - id: open_scm
+    description: "Open Source Control view"
+    action: keyboardShortcut
+    args:
+      keys: ["ctrl+shift+g"]
+    timeout: 3000
+
+  - id: view_repos
+    description: "View Git repositories including worktree"
+    action: click
+    args:
+      target: "Repositories"
+    timeout: 2000
+
+  - id: view_edits
+    description: "Review changes in worktree"
+    action: click
+    args:
+      target: "View All Edits"
+    timeout: 3000
+
+  - id: keep_changes
+    description: "Accept changes from background agent"
+    action: click
+    args:
+      target: "Keep"
+    timeout: 2000
+
+  - id: apply_changes
+    description: "Apply worktree changes to main workspace"
+    action: click
+    args:
+      target: "Apply"
+    timeout: 3000
+
+assertions:
+  - id: llm_worktree
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that background agent successfully created an isolated Git worktree session. Changes should be made in the worktree without affecting the main workspace, and can be reviewed and applied back."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: apply_changes
+      name: "background-worktree-final"
+  storeLogs: true

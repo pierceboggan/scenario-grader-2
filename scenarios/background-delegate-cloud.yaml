@@ -1,0 +1,88 @@
+id: background-delegate-cloud
+name: "Delegate Background Agent to Cloud"
+owner: "@copilot-team"
+tags: [copilot, agents, background, cloud, delegation]
+priority: P1
+
+description: >
+  Test delegating a background agent session to cloud agent using 
+  /delegate command. Enables transitioning from local to remote execution.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Project connected to GitHub repository"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_background
+    description: "Search for background agent command"
+    action: typeText
+    args:
+      text: "Chat: New Background Agent"
+    timeout: 2000
+
+  - id: create_session
+    description: "Create new background agent session"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: enter_task
+    description: "Start task with background agent"
+    action: sendChatMessage
+    args:
+      message: "Implement basic user authentication with login and logout"
+      waitForResponse: false
+    timeout: 5000
+
+  - id: wait_start
+    description: "Wait for background agent to start working"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: delegate_command
+    description: "Use delegate command to hand off to cloud agent"
+    action: sendChatMessage
+    args:
+      message: "/delegate This needs team review, please create a PR"
+      waitForResponse: false
+    timeout: 5000
+
+  - id: wait_delegation
+    description: "Wait for delegation to cloud agent"
+    action: wait
+    args:
+      duration: 5000
+
+assertions:
+  - id: llm_delegate
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that the /delegate command successfully hands off a background agent session to a cloud agent. The full conversation history and context should be passed to the new cloud agent session."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_delegation
+      name: "delegate-to-cloud-final"
+  storeLogs: true

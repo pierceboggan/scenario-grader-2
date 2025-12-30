@@ -1,0 +1,88 @@
+id: background-agent-session
+name: "Create Background Agent Session"
+owner: "@copilot-team"
+tags: [copilot, agents, background, cli, autonomous]
+priority: P0
+
+description: >
+  Test creating and using a background agent session with Copilot CLI 
+  for autonomous coding tasks. Background agents run independently 
+  without requiring continuous user input.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Copilot CLI installed (npm install -g @github/copilot)"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_background
+    description: "Search for background agent command"
+    action: typeText
+    args:
+      text: "Chat: New Background Agent"
+    timeout: 2000
+
+  - id: create_session
+    description: "Create new background agent session"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: wait_init
+    description: "Wait for background agent session to initialize"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: enter_task
+    description: "Enter task for background agent"
+    action: sendChatMessage
+    args:
+      message: "Add a utility function to calculate the factorial of a number with proper error handling"
+      waitForResponse: false
+    timeout: 5000
+
+  - id: wait_autonomous
+    description: "Wait for background agent to work autonomously"
+    action: wait
+    args:
+      duration: 30000
+
+  - id: review_changes
+    description: "Review changes made by background agent"
+    action: click
+    args:
+      target: "View All Changes"
+    timeout: 5000
+
+assertions:
+  - id: llm_background_agent
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that a background agent session was created successfully and can execute coding tasks autonomously. The agent should work independently without requiring continuous user input."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: review_changes
+      name: "background-agent-final"
+  storeLogs: true

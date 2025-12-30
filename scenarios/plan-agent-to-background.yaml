@@ -1,0 +1,94 @@
+id: plan-agent-to-background
+name: "Plan Agent to Background Implementation"
+owner: "@copilot-team"
+tags: [copilot, agents, plan, background, delegation, workflow]
+priority: P0
+
+description: >
+  Test using Plan agent to create implementation plan then delegating 
+  to background agent for execution. Demonstrates the plan-then-implement
+  workflow.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_agents
+    description: "Open agents dropdown"
+    action: click
+    args:
+      target: "Agents"
+    timeout: 2000
+
+  - id: select_plan
+    description: "Select Plan agent"
+    action: click
+    args:
+      target: "Plan"
+    timeout: 2000
+
+  - id: request_plan
+    description: "Ask Plan agent to create implementation plan"
+    action: sendChatMessage
+    args:
+      message: "Create a plan to add dark/light theme toggle to the application with persistence"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_plan
+    description: "Wait for plan to be generated"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: click_implement
+    description: "Open implementation options dropdown"
+    action: click
+    args:
+      target: "Start Implementation"
+    timeout: 3000
+
+  - id: select_background
+    description: "Hand off plan to background agent"
+    action: click
+    args:
+      target: "Continue in Background"
+    timeout: 3000
+
+  - id: wait_start
+    description: "Wait for background agent to start"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: view_sessions
+    description: "View background agent progress in sessions"
+    action: click
+    args:
+      target: "Sessions"
+    timeout: 3000
+
+assertions:
+  - id: llm_plan_background
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that Plan agent creates a structured implementation plan and can hand off to background agent for autonomous execution. The background agent should receive the full plan context."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: view_sessions
+      name: "plan-to-background-final"
+  storeLogs: true

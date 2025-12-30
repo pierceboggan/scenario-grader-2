@@ -1,0 +1,102 @@
+id: assign-issue-to-copilot
+name: "Assign GitHub Issue to Copilot Coding Agent"
+owner: "@copilot-team"
+tags: [copilot, agents, cloud, github, issues, automation]
+priority: P0
+
+description: >
+  Test assigning a GitHub issue to Copilot coding agent for autonomous 
+  implementation. The agent will create a PR to resolve the issue.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "GitHub Pull Requests extension installed"
+  - "User authenticated to GitHub"
+  - "GitHub issues exist in the repository"
+
+steps:
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_pr_view
+    description: "Open GitHub Pull Requests view"
+    action: typeText
+    args:
+      text: "GitHub Pull Requests: Focus on GitHub Pull Request View"
+    timeout: 2000
+
+  - id: execute_focus
+    description: "Execute command"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: click_issues
+    description: "Navigate to issues section"
+    action: click
+    args:
+      target: "Issues"
+    timeout: 3000
+
+  - id: context_issue
+    description: "Right-click on an issue"
+    action: rightClick
+    args:
+      target: "Issue"
+    timeout: 2000
+
+  - id: assign_copilot
+    description: "Assign issue to Copilot coding agent"
+    action: click
+    args:
+      target: "Assign to Copilot"
+    timeout: 3000
+
+  - id: wait_start
+    description: "Wait for cloud agent session to start"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 3000
+
+  - id: filter_cloud
+    description: "Filter to see cloud agent sessions"
+    action: click
+    args:
+      target: "Cloud Agents"
+    timeout: 2000
+
+  - id: view_session
+    description: "View the session working on the issue"
+    action: click
+    args:
+      target: "Assigned issue session"
+    timeout: 3000
+
+assertions:
+  - id: llm_issue_assign
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that a GitHub issue can be assigned to Copilot coding agent. The agent should start a cloud session to work on the issue and create a pull request with the implementation."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: view_session
+      name: "assign-issue-final"
+  storeLogs: true

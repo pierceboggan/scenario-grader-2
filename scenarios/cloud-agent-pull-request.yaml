@@ -1,0 +1,89 @@
+id: cloud-agent-pull-request
+name: "Cloud Agent Creates Pull Request"
+owner: "@copilot-team"
+tags: [copilot, agents, cloud, github, pull-request, code-review]
+priority: P0
+
+description: >
+  Test cloud agent creating a pull request on GitHub for team review 
+  and collaboration. Validates the end-to-end workflow from task 
+  assignment to PR creation.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Project connected to a GitHub repository"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: new_chat_dropdown
+    description: "Open new chat dropdown"
+    action: click
+    args:
+      target: "New Chat"
+    timeout: 2000
+
+  - id: select_cloud
+    description: "Create cloud agent session"
+    action: click
+    args:
+      target: "New Cloud Agent"
+    timeout: 3000
+
+  - id: enter_task
+    description: "Enter task that requires code changes"
+    action: sendChatMessage
+    args:
+      message: "Add comprehensive error handling to all API endpoints with proper error codes and messages"
+      waitForResponse: false
+    timeout: 5000
+
+  - id: wait_complete
+    description: "Wait for cloud agent to complete work and create PR"
+    action: wait
+    args:
+      duration: 60000
+
+  - id: view_sessions
+    description: "Open sessions view"
+    action: click
+    args:
+      target: "Sessions"
+    timeout: 3000
+
+  - id: context_menu
+    description: "Right-click on cloud agent session"
+    action: rightClick
+    args:
+      target: "Cloud agent session"
+    timeout: 2000
+
+  - id: view_github
+    description: "Open pull request in GitHub"
+    action: click
+    args:
+      target: "View in GitHub"
+    timeout: 5000
+
+assertions:
+  - id: llm_pr_creation
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that the cloud agent created a pull request on GitHub with the requested changes. The PR should have a proper description, show file changes, and be ready for team review."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: view_github
+      name: "cloud-agent-pr-final"
+  storeLogs: true

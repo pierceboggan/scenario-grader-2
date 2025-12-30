@@ -1,0 +1,108 @@
+id: agent-session-editor-tab
+name: "Open Agent Session as Editor Tab"
+owner: "@copilot-team"
+tags: [copilot, agents, sessions, editor, views]
+priority: P1
+
+description: >
+  Test opening agent sessions in different views including editor tab 
+  and separate window. Enables flexible workspace organization.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_editor
+    description: "Search for chat editor command"
+    action: typeText
+    args:
+      text: "Chat: New Chat Editor"
+    timeout: 2000
+
+  - id: open_editor
+    description: "Open chat as editor tab"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: send_prompt
+    description: "Send a prompt in editor chat"
+    action: sendChatMessage
+    args:
+      message: "Explain the current project structure"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_response
+    description: "Wait for response"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: open_menu
+    description: "Open overflow menu"
+    action: click
+    args:
+      target: "..."
+    timeout: 2000
+
+  - id: move_window
+    description: "Move chat to separate window"
+    action: click
+    args:
+      target: "Move Chat into New Window"
+    timeout: 3000
+
+  - id: open_palette_again
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: move_sidebar
+    description: "Move chat back to side bar"
+    action: typeText
+    args:
+      text: "Chat: Move Chat into Side Bar"
+    timeout: 2000
+
+  - id: execute_move
+    description: "Execute move command"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+assertions:
+  - id: llm_views
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that chat sessions can be opened as editor tabs and moved between different views (side bar, editor tab, separate window). This enables flexible workspace organization."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: execute_move
+      name: "session-editor-tab-final"
+  storeLogs: true

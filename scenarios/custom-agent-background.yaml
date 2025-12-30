@@ -1,0 +1,118 @@
+id: custom-agent-background
+name: "Use Custom Agent with Background Agent"
+owner: "@copilot-team"
+tags: [copilot, agents, background, custom, persona]
+priority: P1
+
+description: >
+  Test using workspace custom agents with background agent sessions 
+  for specialized personas like code reviewers.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "github.copilot.chat.cli.customAgents.enabled setting is true"
+
+steps:
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_custom
+    description: "Search for custom agent command"
+    action: typeText
+    args:
+      text: "Chat: New Custom Agent"
+    timeout: 2000
+
+  - id: create_custom
+    description: "Create new custom agent"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: name_agent
+    description: "Name the custom agent"
+    action: typeText
+    args:
+      text: "code-reviewer"
+    timeout: 2000
+
+  - id: confirm_name
+    description: "Confirm name"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 2000
+
+  - id: wait_create
+    description: "Wait for agent file to be created"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: open_palette_again
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: search_background
+    description: "Create background agent session"
+    action: typeText
+    args:
+      text: "Chat: New Background Agent"
+    timeout: 2000
+
+  - id: create_background
+    description: "Execute command"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 3000
+
+  - id: open_agents
+    description: "Open agents dropdown"
+    action: click
+    args:
+      target: "Agents"
+    timeout: 2000
+
+  - id: select_custom
+    description: "Select custom agent for background session"
+    action: click
+    args:
+      target: "code-reviewer"
+    timeout: 2000
+
+  - id: enter_task
+    description: "Enter task using custom agent persona"
+    action: sendChatMessage
+    args:
+      message: "Review all files changed in the last commit for potential issues"
+      waitForResponse: false
+    timeout: 5000
+
+assertions:
+  - id: llm_custom_background
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that custom agents can be used with background agent sessions. The background agent should operate according to the custom agent's defined behavior and persona."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: enter_task
+      name: "custom-agent-background-final"
+  storeLogs: true

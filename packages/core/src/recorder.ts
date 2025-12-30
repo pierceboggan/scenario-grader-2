@@ -15,6 +15,41 @@ import * as readline from 'readline';
  */
 
 // ============================================================================
+// Error Types
+// ============================================================================
+
+export class RecorderError extends Error {
+  constructor(
+    message: string,
+    public readonly code: RecorderErrorCode,
+    public readonly recoverable: boolean = false,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'RecorderError';
+  }
+}
+
+export type RecorderErrorCode =
+  | 'VSCODE_NOT_FOUND'
+  | 'VSCODE_LAUNCH_FAILED'
+  | 'VSCODE_CRASHED'
+  | 'VSCODE_UNRESPONSIVE'
+  | 'WORKSPACE_NOT_FOUND'
+  | 'RECORDING_INTERRUPTED'
+  | 'SAVE_FAILED'
+  | 'EVENT_INJECTION_FAILED';
+
+/** Health check interval in milliseconds */
+const HEALTH_CHECK_INTERVAL = 5000;
+
+/** Timeout for health check responses */
+const HEALTH_CHECK_TIMEOUT = 3000;
+
+/** Maximum consecutive health check failures before declaring crash */
+const MAX_HEALTH_FAILURES = 3;
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -61,6 +96,14 @@ export interface RecorderContext {
   screenshotCounter: number;
   isRecording: boolean;
   lastActionTime: number;
+  /** Health check interval ID */
+  healthCheckInterval?: ReturnType<typeof setInterval>;
+  /** Count of consecutive health check failures */
+  healthFailureCount: number;
+  /** Whether VS Code crashed during recording */
+  crashed: boolean;
+  /** Partial scenario saved on crash */
+  partialSavePath?: string;
 }
 
 export type RecorderEventType =
@@ -70,7 +113,10 @@ export type RecorderEventType =
   | 'recorder:screenshot'
   | 'recorder:saved'
   | 'recorder:log'
-  | 'recorder:error';
+  | 'recorder:error'
+  | 'recorder:health_check'
+  | 'recorder:crash_detected'
+  | 'recorder:partial_save';
 
 export interface RecorderEvent {
   type: RecorderEventType;
@@ -134,7 +180,12 @@ function getVSCodePath(): string {
     for (const p of paths) {
       if (fs.existsSync(p)) return p;
     }
-    throw new Error('VS Code not found. Install VS Code or VS Code Insiders.');
+    throw new RecorderError(
+      'VS Code not found. Install VS Code or VS Code Insiders at /Applications/',
+      'VSCODE_NOT_FOUND',
+      false,
+      { searchedPaths: paths, platform }
+    );
   } else if (platform === 'win32') {
     const localAppData = process.env.LOCALAPPDATA || '';
     const paths = [
@@ -144,13 +195,184 @@ function getVSCodePath(): string {
     for (const p of paths) {
       if (fs.existsSync(p)) return p;
     }
-    throw new Error('VS Code not found. Install VS Code.');
+    throw new RecorderError(
+      'VS Code not found. Install VS Code from https://code.visualstudio.com/',
+      'VSCODE_NOT_FOUND',
+      false,
+      { searchedPaths: paths, platform }
+    );
   } else {
     const paths = ['/usr/bin/code-insiders', '/usr/bin/code', '/usr/share/code/code'];
     for (const p of paths) {
       if (fs.existsSync(p)) return p;
     }
-    throw new Error('VS Code not found. Install VS Code.');
+    throw new RecorderError(
+      'VS Code not found. Install VS Code using your package manager or from https://code.visualstudio.com/',
+      'VSCODE_NOT_FOUND',
+      false,
+      { searchedPaths: paths, platform }
+    );
+  }
+}
+
+// ============================================================================
+// Health Check & Crash Recovery
+// ============================================================================
+
+/**
+ * Check if VS Code is still responsive
+ */
+async function checkVSCodeHealth(ctx: RecorderContext): Promise<boolean> {
+  try {
+    // Try to evaluate a simple expression in the page context
+    const result = await Promise.race([
+      ctx.page.evaluate(() => document.readyState),
+      new Promise<null>((_, reject) => 
+        setTimeout(() => reject(new Error('Health check timeout')), HEALTH_CHECK_TIMEOUT)
+      ),
+    ]);
+    return result === 'complete';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start periodic health checks for VS Code
+ */
+function startHealthCheck(ctx: RecorderContext, emit: RecorderEventHandler): void {
+  ctx.healthCheckInterval = setInterval(async () => {
+    if (!ctx.isRecording) {
+      stopHealthCheck(ctx);
+      return;
+    }
+    
+    const isHealthy = await checkVSCodeHealth(ctx);
+    
+    emit({
+      type: 'recorder:health_check',
+      timestamp: new Date().toISOString(),
+      data: { healthy: isHealthy, failureCount: ctx.healthFailureCount },
+    });
+    
+    if (!isHealthy) {
+      ctx.healthFailureCount++;
+      
+      if (ctx.healthFailureCount >= MAX_HEALTH_FAILURES) {
+        ctx.crashed = true;
+        ctx.isRecording = false;
+        stopHealthCheck(ctx);
+        
+        emit({
+          type: 'recorder:crash_detected',
+          timestamp: new Date().toISOString(),
+          data: { 
+            message: 'VS Code appears to have crashed or become unresponsive',
+            actionsRecorded: ctx.actions.length,
+          },
+        });
+        
+        // Attempt to save partial recording
+        await savePartialRecording(ctx, emit);
+      }
+    } else {
+      ctx.healthFailureCount = 0;
+    }
+  }, HEALTH_CHECK_INTERVAL);
+}
+
+/**
+ * Stop health check interval
+ */
+function stopHealthCheck(ctx: RecorderContext): void {
+  if (ctx.healthCheckInterval) {
+    clearInterval(ctx.healthCheckInterval);
+    ctx.healthCheckInterval = undefined;
+  }
+}
+
+/**
+ * Save partial recording when crash is detected
+ */
+async function savePartialRecording(ctx: RecorderContext, emit: RecorderEventHandler): Promise<void> {
+  if (ctx.actions.length === 0) {
+    emit({
+      type: 'recorder:log',
+      timestamp: new Date().toISOString(),
+      data: { message: 'No actions recorded - nothing to save' },
+    });
+    return;
+  }
+  
+  try {
+    // Convert recorded actions to steps
+    const steps = actionsToSteps(ctx.actions);
+    
+    const scenarioName = ctx.config.scenarioName || `partial-recording-${nanoid(6)}`;
+    const scenarioId = scenarioName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    
+    const scenario: Scenario = {
+      id: scenarioId,
+      name: `[PARTIAL] ${scenarioName}`,
+      description: `Partial recording - VS Code crashed after ${ctx.actions.length} actions. ${ctx.config.scenarioDescription || ''}`,
+      priority: ctx.config.priority || 'P1',
+      owner: ctx.config.owner,
+      tags: [...(ctx.config.tags || []), 'partial', 'recovered'],
+      environment: {
+        vscodeTarget: 'desktop',
+        vscodeVersion: 'stable',
+        platform: process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'windows' : 'linux',
+        copilotChannel: 'stable',
+        workspacePath: ctx.config.workspacePath,
+      },
+      preconditions: [
+        'VS Code installed with GitHub Copilot extension',
+        'NOTE: This is a partial recording that was recovered after a crash',
+      ],
+      steps,
+      assertions: [],
+      outputs: {
+        captureVideo: false,
+        storeChatTranscript: false,
+        storeLogs: true,
+      },
+    };
+    
+    const yaml = scenarioToYAML(scenario);
+    const partialPath = path.join(ctx.recordingDir, `${scenarioId}-PARTIAL.yaml`);
+    
+    fs.writeFileSync(partialPath, yaml, 'utf-8');
+    ctx.partialSavePath = partialPath;
+    
+    emit({
+      type: 'recorder:partial_save',
+      timestamp: new Date().toISOString(),
+      data: { 
+        path: partialPath,
+        actionsRecorded: ctx.actions.length,
+        stepsGenerated: steps.length,
+      },
+    });
+    
+    emit({
+      type: 'recorder:log',
+      timestamp: new Date().toISOString(),
+      data: { message: `⚠️  Partial recording saved to: ${partialPath}` },
+    });
+    
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    emit({
+      type: 'recorder:error',
+      timestamp: new Date().toISOString(),
+      data: { 
+        message: `Failed to save partial recording: ${errMsg}`,
+        code: 'SAVE_FAILED',
+      },
+    });
   }
 }
 
@@ -561,10 +783,15 @@ export async function startRecording(
     screenshotCounter: 0,
     isRecording: true,
     lastActionTime: Date.now(),
+    healthFailureCount: 0,
+    crashed: false,
   };
   
   // Inject event listeners
   await injectEventListeners(ctx, emit);
+  
+  // Start health monitoring
+  startHealthCheck(ctx, emit);
   
   emit({
     type: 'recorder:start',
@@ -626,14 +853,42 @@ export async function stopRecording(
   
   ctx.isRecording = false;
   
+  // Stop health monitoring
+  stopHealthCheck(ctx);
+  
+  // If VS Code crashed and we have a partial save, return that
+  if (ctx.crashed && ctx.partialSavePath) {
+    emit({
+      type: 'recorder:log',
+      timestamp: new Date().toISOString(),
+      data: { message: '⚠️  Recording was interrupted due to VS Code crash. Using partial save.' },
+    });
+    
+    const partialYaml = fs.readFileSync(ctx.partialSavePath, 'utf-8');
+    const { parseScenarioYAML } = await import('./parser');
+    const partialScenario = parseScenarioYAML(partialYaml);
+    
+    return { scenario: partialScenario, yamlPath: ctx.partialSavePath, yaml: partialYaml };
+  }
+  
   emit({
     type: 'recorder:log',
     timestamp: new Date().toISOString(),
     data: { message: '⏹️  Stopping recording...' },
   });
   
-  // Take final screenshot
-  await takeRecordingScreenshot(ctx, 'final', emit);
+  // Take final screenshot (only if VS Code is still running)
+  if (!ctx.crashed) {
+    try {
+      await takeRecordingScreenshot(ctx, 'final', emit);
+    } catch (err) {
+      emit({
+        type: 'recorder:log',
+        timestamp: new Date().toISOString(),
+        data: { message: '⚠️  Could not capture final screenshot' },
+      });
+    }
+  }
   
   // Convert actions to steps
   const steps = actionsToSteps(ctx.actions);
@@ -827,4 +1082,5 @@ export {
   actionsToSteps,
   detectKeyboardAction,
   KEYBOARD_ACTION_MAP,
+  // Note: RecorderError and RecorderErrorCode are already exported from their class/type declarations
 };

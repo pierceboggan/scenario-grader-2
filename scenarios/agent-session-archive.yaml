@@ -1,0 +1,94 @@
+id: agent-session-archive
+name: "Archive and Restore Agent Sessions"
+owner: "@copilot-team"
+tags: [copilot, agents, sessions, archive, organization]
+priority: P1
+
+description: >
+  Test archiving completed agent sessions and restoring them from archive.
+  Validates session organization and management features.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Completed agent sessions exist"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: show_all
+    description: "Open full sessions history"
+    action: click
+    args:
+      target: "Show All Sessions"
+    timeout: 3000
+
+  - id: hover_session
+    description: "Hover over a completed session"
+    action: hover
+    args:
+      target: "Completed session"
+    timeout: 2000
+
+  - id: archive_session
+    description: "Archive the session"
+    action: click
+    args:
+      target: "Archive"
+    timeout: 2000
+
+  - id: wait_archive
+    description: "Wait for session to be archived"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: open_filter
+    description: "Open filter dropdown"
+    action: click
+    args:
+      target: "Filter"
+    timeout: 2000
+
+  - id: show_archived
+    description: "Show archived sessions"
+    action: click
+    args:
+      target: "Archived"
+    timeout: 2000
+
+  - id: hover_archived
+    description: "Hover over archived session"
+    action: hover
+    args:
+      target: "Archived session"
+    timeout: 2000
+
+  - id: unarchive
+    description: "Restore session from archive"
+    action: click
+    args:
+      target: "Unarchive"
+    timeout: 2000
+
+assertions:
+  - id: llm_archive
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that agent sessions can be archived to keep the session list organized. Archived sessions should be hidden by default but accessible through the Archived filter and can be unarchived."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: unarchive
+      name: "session-archive-final"
+  storeLogs: true

@@ -1,0 +1,88 @@
+id: agent-sessions-view
+name: "Manage Agent Sessions View"
+owner: "@copilot-team"
+tags: [copilot, agents, sessions, chat]
+priority: P1
+
+description: >
+  Test the unified agent sessions view for managing local, background, 
+  and cloud agent sessions. Validates filtering and session list functionality.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: show_all_sessions
+    description: "Click to view full session history"
+    action: click
+    args:
+      target: "Show All Sessions"
+    timeout: 3000
+
+  - id: open_palette
+    description: "Open Command Palette"
+    action: keyboardShortcut
+    args:
+      keys: ["cmd+shift+p"]
+    timeout: 2000
+
+  - id: new_chat
+    description: "Search for new chat command"
+    action: typeText
+    args:
+      text: "Chat: New Chat"
+    timeout: 2000
+
+  - id: confirm_new_chat
+    description: "Create a new local agent session"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 2000
+
+  - id: send_prompt
+    description: "Send a prompt to local agent"
+    action: sendChatMessage
+    args:
+      message: "Create a simple hello world function in TypeScript"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: view_sessions
+    description: "Open full sessions list"
+    action: click
+    args:
+      target: "Show All Sessions"
+    timeout: 3000
+
+  - id: filter_local
+    description: "Filter to show only local agent sessions"
+    action: click
+    args:
+      target: "Local Agents"
+    timeout: 2000
+
+assertions:
+  - id: llm_sessions_view
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that the agent sessions view displays and allows filtering by agent type (local, background, cloud). The sessions list should show recent sessions with status indicators."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: filter_local
+      name: "agent-sessions-view-final"
+  storeLogs: true

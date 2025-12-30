@@ -1,0 +1,115 @@
+id: agent-session-filter
+name: "Filter and Search Agent Sessions"
+owner: "@copilot-team"
+tags: [copilot, agents, sessions, filter, search]
+priority: P1
+
+description: >
+  Test filtering and searching agent sessions by type, status, and other 
+  criteria in the unified sessions view. Validates the session management
+  capabilities.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Multiple agent sessions exist"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: show_all
+    description: "Open full sessions history"
+    action: click
+    args:
+      target: "Show All Sessions"
+    timeout: 3000
+
+  - id: open_filter
+    description: "Open filter dropdown"
+    action: click
+    args:
+      target: "Filter"
+    timeout: 2000
+
+  - id: filter_local
+    description: "Filter by local agent sessions"
+    action: click
+    args:
+      target: "Local Agents"
+    timeout: 2000
+
+  - id: wait_local
+    description: "Wait for filter to apply"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: open_filter_again
+    description: "Open filter dropdown again"
+    action: click
+    args:
+      target: "Filter"
+    timeout: 2000
+
+  - id: filter_background
+    description: "Filter by background agent sessions"
+    action: click
+    args:
+      target: "Background Agents"
+    timeout: 2000
+
+  - id: wait_background
+    description: "Wait for filter to apply"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: open_filter_third
+    description: "Open filter dropdown again"
+    action: click
+    args:
+      target: "Filter"
+    timeout: 2000
+
+  - id: filter_cloud
+    description: "Filter by cloud agent sessions"
+    action: click
+    args:
+      target: "Cloud Agents"
+    timeout: 2000
+
+  - id: search_term
+    description: "Search for sessions containing specific term"
+    action: typeText
+    args:
+      text: "authentication"
+    timeout: 2000
+
+  - id: reset_filters
+    description: "Reset all filters"
+    action: click
+    args:
+      target: "Reset"
+    timeout: 2000
+
+assertions:
+  - id: llm_filter
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that the sessions view allows filtering by agent type (local, background, cloud), status, and supports text search. The Reset button should clear all filters."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: reset_filters
+      name: "session-filter-final"
+  storeLogs: true

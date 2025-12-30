@@ -1,0 +1,93 @@
+id: review-agent-changes
+name: "Review and Apply Agent File Changes"
+owner: "@copilot-team"
+tags: [copilot, agents, file-changes, review, diff]
+priority: P0
+
+description: >
+  Test reviewing file changes made by agents and applying or undoing them.
+  Validates the change review workflow for agent sessions.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+  - "Completed agent session with file changes exists"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: select_session
+    description: "Select a completed agent session with file changes"
+    action: click
+    args:
+      target: "Completed session"
+    timeout: 3000
+
+  - id: view_changes
+    description: "Open multi-file diff editor"
+    action: click
+    args:
+      target: "View All Changes"
+    timeout: 3000
+
+  - id: wait_diff
+    description: "Wait for diff editor to load"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: click_file
+    description: "Click on a specific file to see individual diff"
+    action: click
+    args:
+      target: "changed-file.ts"
+    timeout: 2000
+
+  - id: review_file
+    description: "Review file changes"
+    action: wait
+    args:
+      duration: 1000
+
+  - id: keep_changes
+    description: "Accept specific changes"
+    action: click
+    args:
+      target: "Keep"
+    timeout: 2000
+
+  - id: undo_changes
+    description: "Reject other changes"
+    action: click
+    args:
+      target: "Undo"
+    timeout: 2000
+
+  - id: apply_all
+    description: "Apply kept changes to workspace"
+    action: click
+    args:
+      target: "Apply"
+    timeout: 3000
+
+assertions:
+  - id: llm_review_changes
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that agent session file changes can be reviewed in a diff editor. Users should be able to keep or undo individual changes and apply them to the workspace."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: apply_all
+      name: "review-changes-final"
+  storeLogs: true

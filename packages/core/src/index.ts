@@ -2,13 +2,34 @@
 export * from './types';
 
 // Parser & Validation
-export { parseScenarioYAML, parseScenarioFile, scenarioToYAML, validateScenario, patchScenario } from './parser';
+export { 
+  parseScenarioYAML, 
+  parseScenarioFile, 
+  scenarioToYAML, 
+  validateScenario, 
+  patchScenario,
+  looksLikeScenario,
+  ScenarioParseError,
+  type ParseErrorCode,
+  type ParseErrorDetail,
+  type ValidationResult,
+} from './parser';
 
 // Natural Language Compiler
 export { compileNaturalLanguage, generateScenarioDiff } from './compiler';
 
 // Scenario Runner
-export { runScenario, resetSandbox, cleanupRun, type RunEvent, type RunEventHandler, type RunEventType } from './runner';
+export { 
+  runScenario, 
+  resetSandbox, 
+  cleanupRun, 
+  RunnerError,
+  type RunnerErrorCode,
+  type RetryConfig,
+  type RunEvent, 
+  type RunEventHandler, 
+  type RunEventType,
+} from './runner';
 
 // Scenario Recorder
 export {
@@ -20,6 +41,8 @@ export {
   actionsToSteps,
   detectKeyboardAction,
   KEYBOARD_ACTION_MAP,
+  RecorderError,
+  type RecorderErrorCode,
   type RecordedAction,
   type RecorderConfig,
   type RecorderContext,

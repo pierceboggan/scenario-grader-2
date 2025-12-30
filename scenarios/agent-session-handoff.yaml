@@ -1,0 +1,86 @@
+id: agent-session-handoff
+name: "Hand Off Agent Session Between Types"
+owner: "@copilot-team"
+tags: [copilot, agents, delegation, handoff, workflow]
+priority: P0
+
+description: >
+  Test delegating tasks from local agent to background or cloud agents 
+  using Continue In feature. This enables seamless transition between
+  agent types based on task requirements.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat view"
+    action: openCopilotChat
+    timeout: 5000
+
+  - id: plan_task
+    description: "Start with a planning task in local agent"
+    action: sendChatMessage
+    args:
+      message: "Create a plan to add authentication to this application using JWT tokens"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_plan
+    description: "Wait for local agent to create plan"
+    action: wait
+    args:
+      duration: 10000
+
+  - id: click_continue
+    description: "Open delegation options"
+    action: click
+    args:
+      target: "Continue In"
+    timeout: 3000
+
+  - id: select_background
+    description: "Hand off to background agent"
+    action: click
+    args:
+      target: "Background"
+    timeout: 3000
+
+  - id: wait_handoff
+    description: "Wait for handoff to complete"
+    action: wait
+    args:
+      duration: 5000
+
+  - id: return_chat
+    description: "Return to chat view"
+    action: openCopilotChat
+    timeout: 3000
+
+  - id: cloud_mention
+    description: "Alternative handoff using @cloud mention"
+    action: sendChatMessage
+    args:
+      message: "@cloud implement the authentication plan"
+      waitForResponse: false
+    timeout: 5000
+
+assertions:
+  - id: llm_handoff
+    type: llmGrade
+    expected: ">=75"
+    description: "Verify that agent session handoff works correctly. The Continue In feature should allow delegating tasks from local agent to background or cloud agents, passing the full conversation history and context."
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: cloud_mention
+      name: "agent-handoff-final"
+  storeLogs: true

@@ -21,6 +21,131 @@ import * as os from 'os';
  * captures screenshots and video. LLM evaluation is disabled for now.
  */
 
+// ============================================================================
+// Error Types
+// ============================================================================
+
+export class RunnerError extends Error {
+  constructor(
+    message: string,
+    public readonly code: RunnerErrorCode,
+    public readonly recoverable: boolean = false,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'RunnerError';
+  }
+}
+
+export type RunnerErrorCode =
+  | 'VSCODE_NOT_FOUND'
+  | 'VSCODE_LAUNCH_FAILED'
+  | 'VSCODE_CRASHED'
+  | 'ELEMENT_NOT_FOUND'
+  | 'ELEMENT_NOT_INTERACTABLE'
+  | 'TIMEOUT'
+  | 'STEP_FAILED'
+  | 'ASSERTION_FAILED'
+  | 'AUTH_FAILED';
+
+// ============================================================================
+// Retry Configuration
+// ============================================================================
+
+export interface RetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxAttempts: number;
+  /** Initial delay between retries in ms (default: 500) */
+  initialDelayMs: number;
+  /** Multiplier for exponential backoff (default: 2) */
+  backoffMultiplier: number;
+  /** Maximum delay between retries in ms (default: 5000) */
+  maxDelayMs: number;
+  /** Error codes that should trigger a retry */
+  retryableErrors: RunnerErrorCode[];
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  initialDelayMs: 500,
+  backoffMultiplier: 2,
+  maxDelayMs: 5000,
+  retryableErrors: ['ELEMENT_NOT_FOUND', 'ELEMENT_NOT_INTERACTABLE', 'TIMEOUT'],
+};
+
+/**
+ * Sleep for a given duration
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute a function with retry logic and exponential backoff
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  config: Partial<RetryConfig> = {},
+  context?: { stepId?: string; action?: string }
+): Promise<T> {
+  const cfg = { ...DEFAULT_RETRY_CONFIG, ...config };
+  let lastError: Error | undefined;
+  let delay = cfg.initialDelayMs;
+  
+  for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      
+      // Check if error is retryable
+      const isRetryable = err instanceof RunnerError 
+        ? cfg.retryableErrors.includes(err.code)
+        : isTransientError(lastError);
+      
+      if (!isRetryable || attempt === cfg.maxAttempts) {
+        throw lastError;
+      }
+      
+      // Log retry attempt
+      const contextStr = context ? ` [${context.stepId || context.action || 'unknown'}]` : '';
+      console.log(`⚠️  Attempt ${attempt}/${cfg.maxAttempts} failed${contextStr}: ${lastError.message}`);
+      console.log(`   Retrying in ${delay}ms...`);
+      
+      await sleep(delay);
+      delay = Math.min(delay * cfg.backoffMultiplier, cfg.maxDelayMs);
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
+ * Check if an error is transient and worth retrying
+ */
+function isTransientError(err: Error): boolean {
+  const message = err.message.toLowerCase();
+  
+  // Playwright-specific transient errors
+  const transientPatterns = [
+    'element is not attached',
+    'element is not visible',
+    'element is not enabled',
+    'element is not stable',
+    'element is outside of the viewport',
+    'waiting for selector',
+    'timeout',
+    'target closed',
+    'navigation interrupted',
+    'execution context was destroyed',
+    'frame was detached',
+    'connection closed',
+    'browser has been closed',
+  ];
+  
+  return transientPatterns.some(pattern => message.includes(pattern));
+}
+
 export type RunEventType = 
   | 'run:start'
   | 'run:complete'
@@ -396,31 +521,115 @@ async function performGitHubLogin(
 }
 
 /**
- * Smart element finder - tries multiple selector strategies
+ * Smart element finder - tries multiple selector strategies with retry
  */
-async function findElement(page: Page, target: string) {
-  const strategies = [
-    target,
-    `text="${target}"`,
-    `[aria-label="${target}"]`,
-    `[aria-label*="${target}"]`,
-    `[title="${target}"]`,
-    `[title*="${target}"]`,
-    `role=button[name="${target}"]`,
-    `role=tab[name="${target}"]`,
-    `[data-testid="${target}"]`,
-  ];
+async function findElement(page: Page, target: string, retryConfig?: Partial<RetryConfig>) {
+  return withRetry(
+    async () => {
+      const strategies = [
+        target,
+        `text="${target}"`,
+        `[aria-label="${target}"]`,
+        `[aria-label*="${target}"]`,
+        `[title="${target}"]`,
+        `[title*="${target}"]`,
+        `role=button[name="${target}"]`,
+        `role=tab[name="${target}"]`,
+        `[data-testid="${target}"]`,
+      ];
 
-  for (const selector of strategies) {
-    try {
-      const element = await page.$(selector);
-      if (element) return element;
-    } catch {
-      // Try next strategy
-    }
-  }
+      for (const selector of strategies) {
+        try {
+          const element = await page.$(selector);
+          if (element) {
+            // Verify element is actually visible and interactable
+            const isVisible = await element.isVisible();
+            if (isVisible) {
+              return element;
+            }
+          }
+        } catch {
+          // Try next strategy
+        }
+      }
+      
+      throw new RunnerError(
+        `Element not found: "${target}". Tried ${strategies.length} selector strategies.`,
+        'ELEMENT_NOT_FOUND',
+        true, // recoverable - worth retrying
+        { target, strategies }
+      );
+    },
+    retryConfig,
+    { action: `findElement(${target})` }
+  );
+}
+
+/**
+ * Wait for element to be actionable with retry
+ */
+async function waitForElement(
+  page: Page,
+  selector: string,
+  options: { timeout?: number; state?: 'visible' | 'attached' | 'hidden' } = {}
+): Promise<void> {
+  const { timeout = 10000, state = 'visible' } = options;
   
-  throw new Error(`Element not found: ${target}`);
+  return withRetry(
+    async () => {
+      try {
+        await page.waitForSelector(selector, { timeout, state });
+      } catch (err) {
+        throw new RunnerError(
+          `Timeout waiting for element: "${selector}" (state: ${state}, timeout: ${timeout}ms)`,
+          'TIMEOUT',
+          true,
+          { selector, state, timeout }
+        );
+      }
+    },
+    { maxAttempts: 2 }, // Only retry once for waits
+    { action: `waitForElement(${selector})` }
+  );
+}
+
+/**
+ * Click element with retry logic
+ */
+async function clickElement(
+  page: Page,
+  target: string,
+  log: (msg: string) => void
+): Promise<void> {
+  return withRetry(
+    async () => {
+      const element = await findElement(page, target, { maxAttempts: 1 });
+      
+      // Check if element is clickable
+      const isEnabled = await element.isEnabled();
+      if (!isEnabled) {
+        throw new RunnerError(
+          `Element is not enabled/clickable: "${target}"`,
+          'ELEMENT_NOT_INTERACTABLE',
+          true,
+          { target }
+        );
+      }
+      
+      // Scroll into view if needed
+      await element.scrollIntoViewIfNeeded();
+      
+      // Click with force if first attempt fails
+      try {
+        await element.click({ timeout: 5000 });
+      } catch {
+        log(`Regular click failed, trying forced click on: ${target}`);
+        await element.click({ force: true });
+      }
+    },
+    { maxAttempts: 3 },
+    { action: `click(${target})` }
+  );
 }
 
 /**
@@ -469,7 +678,8 @@ async function executeStep(
       case 'openCommandPalette':
         log('Opening command palette (Cmd/Ctrl+Shift+P)');
         await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
-        await page.waitForTimeout(500);
+        // Wait for command palette to appear
+        await waitForElement(page, '.quick-input-widget', { timeout: 5000 });
         break;
         
       case 'openCopilotChat':
@@ -490,7 +700,8 @@ async function executeStep(
       case 'openInlineChat':
         log('Opening inline chat (Cmd/Ctrl+I)');
         await page.keyboard.press(process.platform === 'darwin' ? 'Meta+I' : 'Control+I');
-        await page.waitForTimeout(500);
+        // Wait for inline chat input to appear
+        await waitForElement(page, '.inline-chat-input, .monaco-inputbox', { timeout: 5000 });
         break;
         
       case 'typeText':
@@ -520,8 +731,7 @@ async function executeStep(
       case 'click':
         const target = args.target || '';
         log(`Clicking: ${target}`);
-        const el = await findElement(page, target);
-        await el.click();
+        await clickElement(page, target, log);
         break;
         
       case 'wait':
@@ -641,7 +851,28 @@ async function executeStep(
     
   } catch (err) {
     status = 'failed';
-    error = err instanceof Error ? err.message : String(err);
+    
+    // Format error message with context
+    if (err instanceof RunnerError) {
+      error = `[${err.code}] ${err.message}`;
+      if (err.details) {
+        log(`Error details: ${JSON.stringify(err.details)}`);
+      }
+    } else {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      
+      // Provide more helpful error messages for common failures
+      if (errMsg.includes('Target page, context or browser has been closed')) {
+        error = 'VS Code closed unexpectedly. This usually happens when another VS Code instance is running with the same profile. Try using --fresh flag for isolated runs, or close other VS Code windows.';
+      } else if (errMsg.includes('timeout') || errMsg.includes('Timeout')) {
+        error = `Timeout during "${step.action}": ${errMsg}. Consider increasing the step timeout or checking if VS Code is responsive.`;
+      } else if (errMsg.includes('Element not found') || errMsg.includes('not attached')) {
+        error = `Could not find or interact with UI element during "${step.action}": ${errMsg}. The VS Code UI may have changed or the element may not be visible.`;
+      } else {
+        error = errMsg;
+      }
+    }
+    
     log(`FAILED: ${error}`);
     
     try {
@@ -650,7 +881,7 @@ async function executeStep(
       screenshot = failPath;
       log(`Failure screenshot: ${failPath}`);
     } catch {
-      log('Could not capture failure screenshot');
+      log('Could not capture failure screenshot (VS Code may have crashed)');
     }
   }
   
@@ -830,18 +1061,39 @@ export async function runScenario(
     }
   } catch (err) {
     status = 'error';
-    const errMsg = err instanceof Error ? err.message : 'Unknown error';
     
-    if (errMsg.includes('Target page, context or browser has been closed')) {
-      error = 'VS Code closed unexpectedly. This usually happens when another VS Code instance is running with the same profile. Try using --fresh flag for isolated runs, or close other VS Code windows.';
+    // Provide helpful error messages based on the type of failure
+    if (err instanceof RunnerError) {
+      error = `[${err.code}] ${err.message}`;
+      
+      // Add recovery suggestions for known error types
+      switch (err.code) {
+        case 'VSCODE_CRASHED':
+          error += '\n\nSuggestions:\n- Close any other VS Code windows\n- Try running with --fresh flag\n- Check system resources (memory, CPU)';
+          break;
+        case 'ELEMENT_NOT_FOUND':
+          error += '\n\nSuggestions:\n- The VS Code UI may have changed\n- Check if the extension or feature is enabled\n- Increase step timeout';
+          break;
+        case 'TIMEOUT':
+          error += '\n\nSuggestions:\n- Increase the timeout value\n- Check if VS Code is responsive\n- Network issues may be affecting Copilot';
+          break;
+      }
     } else {
-      error = errMsg;
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      
+      if (errMsg.includes('Target page, context or browser has been closed')) {
+        error = 'VS Code closed unexpectedly. This usually happens when another VS Code instance is running with the same profile.\n\nSuggestions:\n- Try using --fresh flag for isolated runs\n- Close other VS Code windows\n- Check if another Electron process is interfering';
+      } else if (errMsg.includes('ECONNREFUSED') || errMsg.includes('ENOTFOUND')) {
+        error = `Network error: ${errMsg}\n\nSuggestions:\n- Check your internet connection\n- Verify GitHub/Copilot services are available\n- Check firewall/proxy settings`;
+      } else {
+        error = errMsg;
+      }
     }
     
     emit({
       type: 'error',
       timestamp: new Date().toISOString(),
-      data: { error },
+      data: { error, code: err instanceof RunnerError ? err.code : 'UNKNOWN' },
     });
   } finally {
     if (ctx) {
