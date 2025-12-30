@@ -273,12 +273,6 @@ function getPriorityBadge(priority: string): string {
   }
 }
 
-function getScoreColor(score: number): string {
-  if (score >= 80) return chalk.green('');
-  if (score >= 60) return chalk.yellow('');
-  return chalk.red('');
-}
-
 function getScoreColorFor5(score: number): string {
   if (score >= 4) return chalk.green('');
   if (score >= 3) return chalk.yellow('');
