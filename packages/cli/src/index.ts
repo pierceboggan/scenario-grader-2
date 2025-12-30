@@ -38,7 +38,7 @@ program
   .option('--no-sandbox-reset', 'Skip sandbox reset')
   .option('--no-llm', 'Disable LLM evaluation')
   .option('--no-artifacts', 'Disable artifact capture')
-  .option('--reuse-profile', 'Reuse existing VS Code profile (may conflict with running VS Code)')
+  .option('--fresh-profile', 'Use fresh VS Code profile (isolated, no extensions/auth)')
   .option('--video', 'Record video of the scenario run')
   .option('-w, --watch', 'Watch mode - rerun on changes')
   .option('-o, --output <path>', 'Output directory for reports')

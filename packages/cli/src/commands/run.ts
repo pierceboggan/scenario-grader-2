@@ -22,7 +22,7 @@ interface RunOptions {
   artifacts: boolean;
   watch?: boolean;
   output?: string;
-  reuseProfile?: boolean;
+  freshProfile?: boolean;
   video?: boolean;
 }
 
@@ -98,8 +98,13 @@ async function runSingleScenario(
     resetSandbox: options.sandboxReset,
     captureArtifacts: options.artifacts,
     enableLLMGrading: options.llm,
-    freshProfile: !options.reuseProfile, // Default to fresh profile
+    freshProfile: options.freshProfile ?? false, // Default: reuse existing profile
     recordVideo: options.video ?? false,
+    // Auth credentials from environment (SCENARIO_GITHUB_EMAIL, SCENARIO_GITHUB_PASSWORD)
+    auth: {
+      email: process.env.SCENARIO_GITHUB_EMAIL,
+      password: process.env.SCENARIO_GITHUB_PASSWORD,
+    },
   };
 
   const handleEvent = (event: RunEvent) => {

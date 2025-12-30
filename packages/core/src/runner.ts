@@ -5,9 +5,10 @@ import {
   RunStatus,
   StepResult,
   AssertionResult,
+  AuthConfig,
 } from './types';
 import { nanoid } from 'nanoid';
-import { _electron as electron, ElectronApplication, Page } from 'playwright';
+import { _electron as electron, ElectronApplication, Page, chromium, Browser } from 'playwright';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -84,6 +85,8 @@ interface VSCodeContext {
   artifactsPath: string;
   screenshotCounter: number;
   videoPath?: string;
+  /** Auth config for GitHub login (from env vars or config) */
+  auth?: AuthConfig;
 }
 
 export interface LaunchOptions {
@@ -91,6 +94,8 @@ export interface LaunchOptions {
   freshProfile?: boolean;
   /** Record video of the scenario run */
   recordVideo?: boolean;
+  /** GitHub auth config for fresh profile scenarios */
+  auth?: AuthConfig;
 }
 
 /**
@@ -102,8 +107,8 @@ async function launchVSCode(
   emit: RunEventHandler,
   options: LaunchOptions = {}
 ): Promise<VSCodeContext> {
-  // Default to fresh profile to avoid conflicts with running VS Code instances
-  const { freshProfile = true, recordVideo = false } = options;
+  // Default to using existing profile (already authenticated)
+  const { freshProfile = false, recordVideo = false, auth } = options;
   
   const artifactsPath = path.join(ARTIFACTS_DIR, runId);
   fs.mkdirSync(artifactsPath, { recursive: true });
@@ -228,6 +233,7 @@ async function launchVSCode(
     artifactsPath,
     screenshotCounter: 0,
     videoPath: recordVideo ? videosDir : undefined,
+    auth,
   };
 }
 
@@ -265,6 +271,162 @@ async function dismissDialogs(page: Page, emit: RunEventHandler): Promise<void> 
     }
   } catch {
     // Dialogs may not be present
+  }
+}
+
+/**
+ * Get auth credentials from environment variables
+ */
+function getAuthFromEnv(): AuthConfig {
+  return {
+    email: process.env.SCENARIO_GITHUB_EMAIL,
+    password: process.env.SCENARIO_GITHUB_PASSWORD,
+  };
+}
+
+/**
+ * Perform GitHub login for Copilot authentication
+ * 
+ * This handles the VS Code -> Browser OAuth flow:
+ * 1. Use keyboard navigation to select "Continue with GitHub" in VS Code sign-in dialog
+ * 2. VS Code opens browser to github.com/login/device
+ * 3. We automate the browser login with provided credentials
+ * 4. Authorize the VS Code app
+ * 5. Return to VS Code which should now be authenticated
+ */
+async function performGitHubLogin(
+  vscodePage: Page,
+  ctx: VSCodeContext,
+  log: (msg: string) => void
+): Promise<void> {
+  // Get auth from context or environment
+  const auth = ctx.auth || getAuthFromEnv();
+  
+  if (!auth.email || !auth.password) {
+    log('⚠️  No GitHub credentials provided. Set SCENARIO_GITHUB_EMAIL and SCENARIO_GITHUB_PASSWORD environment variables.');
+    log('   Skipping automated login - manual login may be required.');
+    return;
+  }
+  
+  log('Starting GitHub authentication flow via keyboard navigation...');
+  
+  // The sign-in dialog has focus and shows:
+  // - "Continue with GitHub" (first/focused button)
+  // - "Continue with Google"
+  // - "Continue with Apple"
+  // - "Continue with GHE.com"
+  // - "Skip for now"
+  
+  // The "Continue with GitHub" button should be the first/default button
+  // Just press Enter to activate it
+  log('Pressing Enter to select "Continue with GitHub"...');
+  await vscodePage.keyboard.press('Enter');
+  await vscodePage.waitForTimeout(2000);
+  
+  // VS Code may show a dialog asking to open external URL
+  // This is a VS Code modal dialog, try pressing Enter again to confirm
+  log('Checking for external URL confirmation dialog...');
+  
+  // Take a screenshot to see what's happening
+  const screenshotPath = `${ctx.artifactsPath}/screenshots/auth_dialog.png`;
+  await vscodePage.screenshot({ path: screenshotPath });
+  log(`Auth dialog screenshot: ${screenshotPath}`);
+  
+  // Try pressing Enter to confirm any "Open" dialog
+  await vscodePage.keyboard.press('Enter');
+  await vscodePage.waitForTimeout(3000);
+  
+  // Now we need to automate the browser that VS Code opened
+  // VS Code opens the default browser, we'll launch our own Playwright browser
+  // to navigate to GitHub and complete the auth flow
+  log('Launching browser for GitHub authentication...');
+  
+  let browser: Browser | undefined;
+  try {
+    // Launch browser with visible window for OAuth flow
+    browser = await chromium.launch({
+      headless: false, // Must be visible for OAuth
+      channel: 'chrome', // Use system Chrome if available
+    });
+    
+    const browserContext = await browser.newContext();
+    const browserPage = await browserContext.newPage();
+    
+    // Navigate to GitHub login
+    log('Navigating to GitHub login...');
+    await browserPage.goto('https://github.com/login');
+    await browserPage.waitForLoadState('networkidle');
+    
+    // Check if already logged in (redirected to home or other page)
+    const currentUrl = browserPage.url();
+    if (!currentUrl.includes('/login')) {
+      log('Already logged into GitHub, proceeding to device authorization...');
+    } else {
+      // Fill in credentials
+      log('Entering GitHub credentials...');
+      await browserPage.fill('#login_field', auth.email);
+      await browserPage.fill('#password', auth.password);
+      await browserPage.click('input[type="submit"]');
+      
+      // Wait for login to complete
+      await browserPage.waitForLoadState('networkidle');
+      await browserPage.waitForTimeout(2000);
+      
+      // Check for 2FA - this would require additional handling
+      const twoFactorField = await browserPage.$('#app_totp');
+      if (twoFactorField) {
+        log('⚠️  Two-factor authentication required. Please complete 2FA manually.');
+        // Wait longer for manual 2FA
+        await browserPage.waitForTimeout(30000);
+      }
+    }
+    
+    // Now go to GitHub device activation page (VS Code uses device flow)
+    log('Checking for device authorization...');
+    await browserPage.goto('https://github.com/login/device');
+    await browserPage.waitForLoadState('networkidle');
+    await browserPage.waitForTimeout(1000);
+    
+    // Look for authorize button
+    const authorizeBtn = await browserPage.$('button[type="submit"]:has-text("Authorize")');
+    if (authorizeBtn) {
+      log('Clicking Authorize button...');
+      await authorizeBtn.click();
+      await browserPage.waitForLoadState('networkidle');
+      await browserPage.waitForTimeout(2000);
+    }
+    
+    // Check for success message
+    const successText = await browserPage.textContent('body');
+    if (successText?.includes('successfully') || successText?.includes('authorized') || successText?.includes('Congratulations')) {
+      log('✅ GitHub authorization successful!');
+    } else {
+      log('Authorization page reached. Please check VS Code for confirmation.');
+    }
+    
+    // Close browser
+    await browser.close();
+    browser = undefined;
+    
+    // Return to VS Code and wait for it to pick up the auth
+    log('Returning to VS Code...');
+    await vscodePage.waitForTimeout(3000);
+    
+    // Check if Copilot is now available
+    log('GitHub authentication flow completed. Copilot should now be available.');
+    
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log(`⚠️  Browser auth error: ${errMsg}`);
+    log('   You may need to complete authentication manually.');
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        // Already closed
+      }
+    }
   }
 }
 
@@ -349,7 +511,18 @@ async function executeStep(
       case 'openCopilotChat':
         log('Opening Copilot Chat');
         await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+I' : 'Control+Shift+I');
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(2000);
+        
+        // Check if sign-in dialog appeared by taking a screenshot and checking visually
+        // The sign-in dialog shows "Sign in to use AI Features"
+        const pageContent = await page.content();
+        const needsAuth = pageContent.includes('Sign in to use AI Features') || 
+                          pageContent.includes('Continue with GitHub');
+        
+        if (needsAuth) {
+          log('Sign-in dialog detected, initiating GitHub auth via keyboard navigation...');
+          await performGitHubLogin(page, ctx, log);
+        }
         break;
         
       case 'openInlineChat':
@@ -474,6 +647,15 @@ async function executeStep(
             log('Could not find hover target');
           }
         }
+        break;
+        
+      case 'githubLogin':
+        await performGitHubLogin(page, ctx, log);
+        break;
+        
+      case 'signInWithGitHub':
+        // Alias for githubLogin
+        await performGitHubLogin(page, ctx, log);
         break;
         
       default:
@@ -651,10 +833,11 @@ export async function runScenario(
   let ctx: VSCodeContext | undefined;
   
   try {
-    // Launch VS Code (defaults to fresh profile to avoid conflicts)
+    // Launch VS Code (defaults to existing profile for already-authenticated scenarios)
     ctx = await launchVSCode(scenario, runId, emit, { 
-      freshProfile: config.freshProfile ?? true,
+      freshProfile: config.freshProfile ?? false,
       recordVideo: config.recordVideo ?? false,
+      auth: config.auth,
     });
     
     // Execute steps

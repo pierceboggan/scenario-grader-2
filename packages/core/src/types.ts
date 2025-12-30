@@ -207,6 +207,23 @@ export interface RunReport {
 }
 
 // ============================================================================
+// Authentication Configuration
+// ============================================================================
+
+/**
+ * GitHub authentication credentials for first-run scenarios.
+ * Loaded from environment variables:
+ *   - SCENARIO_GITHUB_EMAIL
+ *   - SCENARIO_GITHUB_PASSWORD
+ */
+export interface AuthConfig {
+  /** GitHub account email for login */
+  email?: string;
+  /** GitHub account password */
+  password?: string;
+}
+
+// ============================================================================
 // Run Configuration
 // ============================================================================
 
@@ -223,6 +240,8 @@ export interface RunConfig {
   freshProfile?: boolean;
   /** Record video of the scenario run (default: false) */
   recordVideo?: boolean;
+  /** GitHub authentication config for fresh profile scenarios */
+  auth?: AuthConfig;
 }
 
 // ============================================================================

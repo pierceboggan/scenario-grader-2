@@ -167,7 +167,29 @@ scenario-runner run scenario-id --no-llm
 
 # Skip sandbox reset
 scenario-runner run scenario-id --no-sandbox-reset
+
+# Record video
+scenario-runner run scenario-id --video
+
+# Use existing VS Code profile (skip fresh isolation)
+scenario-runner run scenario-id --reuse-profile
 ```
+
+### Authentication
+
+For scenarios that require GitHub/Copilot authentication (especially fresh profile scenarios), set these environment variables:
+
+```bash
+export SCENARIO_GITHUB_EMAIL="your-github-email@example.com"
+export SCENARIO_GITHUB_PASSWORD="your-github-password"
+```
+
+The runner will automatically handle the GitHub OAuth flow when:
+- Running with a fresh profile (`--no-reuse-profile`, the default)
+- A `githubLogin` or `signInWithGitHub` step is encountered
+- VS Code prompts for Copilot sign-in
+
+**Note:** For security, never commit credentials to source control. Use environment variables or a `.env` file (add to `.gitignore`).
 
 #### Create Scenarios
 
