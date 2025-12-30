@@ -1,0 +1,31 @@
+{
+  "name": "@scenario-grader/cli",
+  "version": "1.0.0",
+  "description": "CLI for VS Code Scenario Runner",
+  "type": "module",
+  "bin": {
+    "scenario-runner": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@scenario-grader/core": "*",
+    "commander": "^11.1.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1",
+    "inquirer": "^9.2.12",
+    "cli-table3": "^0.6.3",
+    "boxen": "^7.1.1",
+    "figures": "^6.0.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0",
+    "@types/inquirer": "^9.0.7"
+  }
+}

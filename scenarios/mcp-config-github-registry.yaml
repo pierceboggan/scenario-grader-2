@@ -1,0 +1,64 @@
+id: mcp-config-github-registry
+name: "Configure MCP Server from GitHub Registry"
+owner: "@copilot-platform"
+tags: [mcp, configuration, copilot, registry]
+priority: P0
+
+description: >
+  Validates that a user can discover and configure an MCP server 
+  from the GitHub MCP Registry via Copilot Chat.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "GitHub Copilot extension installed and authenticated"
+  - "Network access to GitHub MCP Registry"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_copilot_chat
+    description: "Open Copilot Chat panel"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 5000
+
+  - id: search_mcp_server
+    description: "Ask about MCP server configuration"
+    action: sendChatMessage
+    args:
+      message: "How do I configure MCP servers in VS Code?"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_response
+    description: "Wait for response"
+    action: wait
+    args:
+      duration: 5000
+
+assertions:
+  - id: llm_ux_grade
+    type: llmGrade
+    expected: ">=80"
+    required: false
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: open_copilot_chat
+      name: "copilot-chat-opened"
+    - atStep: wait_response
+      name: "mcp-response"
+  storeChatTranscript: true
+  storeLogs: true

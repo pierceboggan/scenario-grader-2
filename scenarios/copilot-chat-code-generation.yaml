@@ -1,0 +1,65 @@
+id: copilot-chat-code-generation
+name: "Generate Code via Copilot Chat"
+owner: "@copilot-team"
+tags: [copilot, chat, code-generation, ai]
+priority: P0
+
+description: >
+  Tests the end-to-end experience of using Copilot Chat to generate 
+  code from a natural language prompt. Validates response quality, 
+  code insertion, and user experience.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_chat
+    description: "Open Copilot Chat"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 3000
+
+  - id: send_prompt
+    description: "Send a code generation prompt"
+    action: sendChatMessage
+    args:
+      message: "Write a TypeScript function that validates email addresses"
+      waitForResponse: true
+    timeout: 30000
+
+  - id: wait_response
+    description: "Wait for response"
+    action: wait
+    args:
+      duration: 5000
+
+assertions:
+  - id: llm_quality_check
+    type: llmGrade
+    expected: ">=85"
+    required: false
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: open_chat
+      name: "chat-open"
+    - atStep: wait_response
+      name: "code-generated"
+  storeChatTranscript: true
+  storeLogs: true

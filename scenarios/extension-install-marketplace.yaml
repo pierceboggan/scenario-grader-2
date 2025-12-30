@@ -1,0 +1,79 @@
+id: extension-install-marketplace
+name: "Install Extension from Marketplace"
+owner: "@vscode-platform"
+tags: [extensions, marketplace, installation]
+priority: P1
+
+description: >
+  Validates the end-to-end experience of searching for and 
+  installing an extension from the VS Code Marketplace.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "Network access to VS Code Marketplace"
+
+steps:
+  - id: launch
+    description: "Launch VS Code"
+    action: launchVSCodeWithProfile
+    args: {}
+    timeout: 10000
+
+  - id: open_extensions
+    description: "Open Extensions view via command palette"
+    action: openCommandPalette
+    timeout: 3000
+
+  - id: type_extensions_cmd
+    description: "Type Extensions command"
+    action: typeText
+    args:
+      text: "View: Show Extensions"
+    timeout: 2000
+
+  - id: execute_cmd
+    description: "Execute command"
+    action: pressKey
+    args:
+      key: "Enter"
+    timeout: 2000
+
+  - id: wait_view
+    description: "Wait for Extensions view"
+    action: wait
+    args:
+      duration: 2000
+
+  - id: search_extension
+    description: "Search for Python extension"
+    action: typeText
+    args:
+      text: "Python Microsoft"
+    timeout: 3000
+
+  - id: wait_results
+    description: "Wait for search results"
+    action: wait
+    args:
+      duration: 3000
+
+assertions:
+  - id: llm_experience_grade
+    type: llmGrade
+    expected: ">=75"
+    required: false
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: wait_view
+      name: "extensions-view"
+    - atStep: wait_results
+      name: "search-results"
+  storeChatTranscript: false
+  storeLogs: true
