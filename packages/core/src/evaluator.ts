@@ -25,12 +25,12 @@ export interface EvaluatorConfig {
 const DEFAULT_MODEL = 'gpt-5.2';
 
 const EVALUATION_DIMENSIONS = [
-  { id: 'discoverability', name: 'Discoverability', weight: 0.2 },
-  { id: 'clarity', name: 'UI Clarity', weight: 0.2 },
-  { id: 'responsiveness', name: 'Responsiveness', weight: 0.15 },
-  { id: 'error-handling', name: 'Error Handling', weight: 0.15 },
-  { id: 'completion', name: 'Task Completion', weight: 0.2 },
-  { id: 'polish', name: 'Overall Polish', weight: 0.1 },
+  { id: 'discoverability', name: 'Discoverability', weight: 0.15 },
+  { id: 'clarity', name: 'UI Clarity', weight: 0.15 },
+  { id: 'responsiveness', name: 'Speed & Responsiveness', weight: 0.20 },
+  { id: 'ai-integration', name: 'AI Integration Quality', weight: 0.20 },
+  { id: 'completion', name: 'Task Completion', weight: 0.20 },
+  { id: 'polish', name: 'Polish & Delight', weight: 0.10 },
 ];
 
 // ============================================================================
@@ -54,24 +54,29 @@ function getOpenAIClient(apiKey?: string): OpenAI {
 // Evaluation Prompts
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are an expert UX evaluator for VS Code. Your job is to analyze scenario execution artifacts (screenshots, logs, transcripts) and provide detailed evaluation scores and actionable suggestions.
+const SYSTEM_PROMPT = `You are an expert developer experience (DX) evaluator for AI-powered code editors. Your job is to evaluate VS Code scenarios against best-in-class standards set by Cursor, Windsurf, and other modern AI IDEs.
 
 You evaluate across these dimensions:
-- **Discoverability**: How easy is it to find and access the feature?
-- **UI Clarity**: Are the UI elements well-labeled and self-explanatory?
-- **Responsiveness**: Does the UI respond quickly with appropriate feedback?
-- **Error Handling**: Are errors communicated clearly with recovery paths?
-- **Task Completion**: Can users successfully complete the intended task?
-- **Overall Polish**: Does the experience feel professional and refined?
+- **Discoverability**: How easy is it to find and access AI features? Are entry points intuitive?
+- **UI Clarity**: Are AI interactions well-labeled and self-explanatory? Clear affordances?
+- **Speed & Responsiveness**: Is the AI fast? Are there streaming responses? Loading indicators? Does it feel instant?
+- **AI Integration Quality**: How seamlessly does AI blend into the workflow? Context awareness? Multi-turn conversations? Code application?
+- **Task Completion**: Can developers complete their intent quickly? Fewer steps than competitors?
+- **Polish & Delight**: Does the experience feel magical? Thoughtful animations? Attention to detail?
+
+Benchmark against modern AI IDE standards:
+- Cursor: Inline edits, fast completions, Cmd+K everywhere, agent mode
+- Windsurf: Cascade flows, ambient awareness, predictive actions  
+- Claude/ChatGPT coding: Context retention, code application, iteration speed
 
 Score each dimension from 1-5:
-- 1: Critical issues, feature is unusable
-- 2: Major issues that significantly impact usability
-- 3: Works but has noticeable friction
-- 4: Good experience with minor improvements possible
-- 5: Excellent, polished experience
+- 1: Significantly behind competitors, major friction
+- 2: Below average, noticeable gaps vs modern AI IDEs
+- 3: On par with baseline expectations, some friction
+- 4: Good experience, competitive with best-in-class
+- 5: Exceptional, sets new standards for AI coding UX
 
-Provide specific, actionable feedback tied to what you observe in the artifacts.`;
+Provide specific, actionable feedback tied to what you observe. Reference competitor features when relevant.`;
 
 function buildUserPrompt(
   scenario: Scenario,
@@ -122,7 +127,7 @@ Analyze the execution and provide your evaluation as a JSON object with this exa
   ]
 }
 
-Ensure dimensions array includes all 6 dimensions: discoverability, clarity, responsiveness, error-handling, completion, polish.
+Ensure dimensions array includes all 6 dimensions: discoverability, clarity, responsiveness, ai-integration, completion, polish.
 Generate 1-5 suggestions based on issues found. Focus on actionable improvements.`;
 }
 
@@ -287,72 +292,72 @@ function normalizeEvaluation(parsed: any, rawResponse: string): LLMEvaluation {
 
 const SAMPLE_FEEDBACK = {
   discoverability: [
-    'The entry point for this feature was intuitive and easy to find.',
-    'Users may struggle to discover this functionality without guidance.',
-    'Clear iconography and placement make this feature highly discoverable.',
-    'Consider adding a tooltip or walkthrough for first-time users.',
+    'Entry points for AI features are intuitive and well-placed.',
+    'Users may miss AI capabilities without better visual cues - Cursor shows inline hints.',
+    'Clear iconography and keyboard shortcuts make this feature highly discoverable.',
+    'Consider a command palette integration similar to Cursor\'s Cmd+K everywhere pattern.',
   ],
   clarity: [
-    'The UI elements are well-labeled and self-explanatory.',
-    'Some terminology may be confusing to new users.',
-    'Excellent use of visual hierarchy to guide user attention.',
-    'The flow could benefit from clearer step indicators.',
+    'AI interactions are well-labeled with clear affordances.',
+    'Some terminology may confuse users new to AI coding assistants.',
+    'Excellent visual hierarchy guides users through AI workflows.',
+    'The flow could benefit from clearer step indicators like Windsurf\'s cascade status.',
   ],
   responsiveness: [
-    'Actions complete quickly with appropriate feedback.',
-    'Some operations feel sluggish and could use loading indicators.',
-    'Excellent perceived performance throughout the workflow.',
-    'Consider adding skeleton loaders for async operations.',
+    'Streaming responses feel fast and modern - competitive with Cursor.',
+    'Response latency is noticeable - consider optimistic UI or skeleton states.',
+    'Excellent perceived performance with instant feedback throughout.',
+    'First-token latency could be improved - Windsurf shows thinking indicators sooner.',
   ],
-  'error-handling': [
-    'Error messages are clear and actionable.',
-    'Some edge cases result in cryptic error messages.',
-    'Recovery from errors is smooth and well-guided.',
-    'Consider providing more specific troubleshooting steps.',
+  'ai-integration': [
+    'AI seamlessly integrates into the editing workflow without context switching.',
+    'Context awareness could be improved - Cursor maintains better conversation context.',
+    'Code application is smooth with clear diff previews.',
+    'Consider adding ambient awareness features like Windsurf\'s predictive suggestions.',
   ],
   completion: [
-    'Users can successfully complete the intended task.',
-    'Some users may get stuck at intermediate steps.',
-    'The happy path is well-defined and reliable.',
-    'Consider adding progress persistence for complex workflows.',
+    'Developers can complete tasks with minimal friction.',
+    'Some users may get stuck at intermediate steps - consider guided flows.',
+    'The happy path is efficient and competitive with modern AI IDEs.',
+    'Consider reducing clicks/steps - Cursor often achieves tasks in fewer interactions.',
   ],
   polish: [
-    'The experience feels polished and professional.',
-    'Minor visual inconsistencies detract from the experience.',
-    'Attention to detail is evident throughout.',
-    'Some animations could be smoother.',
+    'The experience feels magical and delightful - attention to detail is evident.',
+    'Minor visual inconsistencies detract from the premium feel.',
+    'Thoughtful animations and transitions enhance the experience.',
+    'Some micro-interactions could be smoother - compare to Cursor\'s inline edit animations.',
   ],
 };
 
 const SAMPLE_SUGGESTIONS: Omit<Suggestion, 'id'>[] = [
   {
-    title: 'Add contextual help for MCP configuration',
-    description: 'Consider adding an inline help panel or documentation link when users are configuring MCP servers. This would reduce friction for first-time users.',
-    labels: ['area:mcp', 'type:ux', 'good-first-issue'],
-    severity: 'medium',
-  },
-  {
-    title: 'Improve error message specificity',
-    description: 'When MCP server connection fails, provide more specific error messages indicating whether the issue is network-related, authentication-related, or configuration-related.',
-    labels: ['area:mcp', 'type:bug', 'priority:high'],
+    title: 'Add inline AI edit capability (Cmd+K pattern)',
+    description: 'Cursor popularized Cmd+K for inline edits anywhere in the editor. Consider a similar pattern for quick AI-powered code modifications without opening a separate chat panel.',
+    labels: ['area:copilot', 'type:feature', 'competitor:cursor'],
     severity: 'high',
   },
   {
-    title: 'Add confirmation dialog for destructive actions',
-    description: 'When removing an MCP server configuration, show a confirmation dialog to prevent accidental deletions.',
-    labels: ['area:mcp', 'type:ux'],
-    severity: 'low',
+    title: 'Improve streaming response latency',
+    description: 'First-token latency feels slower than Cursor/Windsurf. Consider optimistic UI updates, better caching, or showing a "thinking" indicator sooner to improve perceived performance.',
+    labels: ['area:copilot', 'type:performance', 'priority:high'],
+    severity: 'high',
   },
   {
-    title: 'Implement MCP server health indicator',
-    description: 'Add a visual indicator showing the connection status of configured MCP servers in the sidebar.',
-    labels: ['area:mcp', 'type:feature'],
+    title: 'Add ambient context awareness',
+    description: 'Windsurf\'s Cascade shows predictive suggestions based on recent edits. Consider proactive AI suggestions that anticipate developer intent without explicit invocation.',
+    labels: ['area:copilot', 'type:feature', 'competitor:windsurf'],
     severity: 'medium',
   },
   {
-    title: 'Support keyboard navigation in MCP panel',
-    description: 'Ensure all MCP panel actions are accessible via keyboard shortcuts for power users and accessibility.',
-    labels: ['area:mcp', 'type:accessibility'],
+    title: 'Implement multi-file edit preview',
+    description: 'When AI suggests changes across multiple files, show a unified diff view with accept/reject per-file similar to Cursor\'s agent mode output.',
+    labels: ['area:copilot', 'type:feature'],
+    severity: 'medium',
+  },
+  {
+    title: 'Add conversation context persistence',
+    description: 'Chat context is lost between sessions. Consider persisting conversation history and allowing users to reference previous discussions for better continuity.',
+    labels: ['area:copilot', 'type:ux'],
     severity: 'medium',
   },
 ];

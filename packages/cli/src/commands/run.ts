@@ -190,23 +190,21 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
     // LLM Evaluation
     if (report.llmEvaluation) {
       console.log(chalk.bold('  LLM Evaluation (GPT-5.2):'));
-      console.log(`    ${chalk.gray('Overall Score:')} ${getScoreColor(report.llmEvaluation.overallScore)}${report.llmEvaluation.overallScore}/100${chalk.reset('')}`);
+      console.log(`    ${chalk.gray('Overall Score:')} ${getScoreColorFor5(report.llmEvaluation.overallScore)}${report.llmEvaluation.overallScore}/5${chalk.reset('')}`);
       
       for (const dim of report.llmEvaluation.dimensions) {
-        const score = dim.score * 20; // Convert 1-5 to percentage
-        console.log(`    ${chalk.gray(dim.name + ':')} ${getScoreColor(score)}${dim.score}/5${chalk.reset('')} - ${chalk.dim(dim.feedback.substring(0, 50))}${dim.feedback.length > 50 ? '...' : ''}`);
+        console.log(`    ${chalk.gray(dim.name + ':')} ${getScoreColorFor5(dim.score)}${dim.score}/5${chalk.reset('')}`);
       }
       
       if (report.llmEvaluation.suggestions.length > 0) {
         console.log('');
-        console.log(chalk.bold('  Suggestions:'));
-        for (const suggestion of report.llmEvaluation.suggestions.slice(0, 3)) {
+        console.log(chalk.bold('  Top Suggestions:'));
+        for (const suggestion of report.llmEvaluation.suggestions.slice(0, 2)) {
           const severityColor = suggestion.severity === 'critical' ? chalk.red :
                                suggestion.severity === 'high' ? chalk.yellow :
                                suggestion.severity === 'medium' ? chalk.cyan :
                                chalk.gray;
           console.log(`    ${severityColor('●')} ${suggestion.title}`);
-          console.log(`      ${chalk.dim(suggestion.description.substring(0, 80))}${suggestion.description.length > 80 ? '...' : ''}`);
         }
       }
       console.log('');
@@ -214,12 +212,20 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
     
     console.log(chalk.dim('═'.repeat(60)));
     
-    // Save report if output specified
+    // Generate and save markdown report
+    const markdownReport = generateMarkdownReport(scenario, report);
+    const reportDir = report.artifacts.logs ? path.dirname(report.artifacts.logs) : path.join(process.cwd(), 'reports');
+    fs.mkdirSync(reportDir, { recursive: true });
+    const mdReportPath = path.join(reportDir, 'REPORT.md');
+    fs.writeFileSync(mdReportPath, markdownReport);
+    console.log(chalk.green(`\n📄 Report saved: ${mdReportPath}`));
+    
+    // Save JSON report if output specified
     if (options.output) {
       const reportPath = path.join(options.output, `${report.id}.json`);
       fs.mkdirSync(options.output, { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-      console.log(chalk.green(`\nReport saved to: ${reportPath}`));
+      console.log(chalk.green(`   JSON report: ${reportPath}`));
     }
     
     // Exit code
@@ -271,4 +277,112 @@ function getScoreColor(score: number): string {
   if (score >= 80) return chalk.green('');
   if (score >= 60) return chalk.yellow('');
   return chalk.red('');
+}
+
+function getScoreColorFor5(score: number): string {
+  if (score >= 4) return chalk.green('');
+  if (score >= 3) return chalk.yellow('');
+  return chalk.red('');
+}
+
+function getScoreEmoji(score: number): string {
+  if (score >= 4.5) return '🌟';
+  if (score >= 4) return '✅';
+  if (score >= 3) return '⚠️';
+  return '❌';
+}
+
+function generateMarkdownReport(scenario: Scenario, report: any): string {
+  const md: string[] = [];
+  
+  // Header
+  md.push(`# Scenario Report: ${scenario.name}`);
+  md.push('');
+  md.push(`> **ID:** \`${scenario.id}\` | **Run ID:** \`${report.id}\``);
+  md.push(`> **Date:** ${new Date(report.startTime).toLocaleString()}`);
+  md.push('');
+  
+  // Quick Summary
+  const status = report.status.toUpperCase();
+  const statusEmoji = report.status === 'passed' ? '✅' : report.status === 'failed' ? '❌' : '⚠️';
+  md.push(`## ${statusEmoji} Status: ${status}`);
+  md.push('');
+  md.push(`| Metric | Value |`);
+  md.push(`|--------|-------|`);
+  md.push(`| Duration | ${report.duration ? `${(report.duration / 1000).toFixed(2)}s` : 'N/A'} |`);
+  md.push(`| Steps | ${report.steps.filter((s: any) => s.status === 'passed').length}/${report.steps.length} passed |`);
+  if (report.llmEvaluation) {
+    md.push(`| **DX Score** | **${report.llmEvaluation.overallScore}/5** ${getScoreEmoji(report.llmEvaluation.overallScore)} |`);
+  }
+  md.push('');
+  
+  // LLM Evaluation Details
+  if (report.llmEvaluation) {
+    md.push('## 🎯 Developer Experience Evaluation');
+    md.push('');
+    md.push('*Evaluated against best-in-class AI IDEs (Cursor, Windsurf, etc.)*');
+    md.push('');
+    
+    // Dimension scores table
+    md.push('| Dimension | Score | Assessment |');
+    md.push('|-----------|-------|------------|');
+    for (const dim of report.llmEvaluation.dimensions) {
+      const emoji = getScoreEmoji(dim.score);
+      md.push(`| ${dim.name} | ${dim.score}/5 ${emoji} | ${dim.feedback} |`);
+    }
+    md.push('');
+    
+    // Suggestions
+    if (report.llmEvaluation.suggestions.length > 0) {
+      md.push('## 💡 Recommendations');
+      md.push('');
+      for (const suggestion of report.llmEvaluation.suggestions) {
+        const severityBadge = suggestion.severity === 'critical' ? '🔴' :
+                            suggestion.severity === 'high' ? '🟠' :
+                            suggestion.severity === 'medium' ? '🟡' : '🟢';
+        md.push(`### ${severityBadge} ${suggestion.title}`);
+        md.push('');
+        md.push(suggestion.description);
+        md.push('');
+        if (suggestion.labels && suggestion.labels.length > 0) {
+          md.push(`*Labels: ${suggestion.labels.map((l: string) => `\`${l}\``).join(', ')}*`);
+          md.push('');
+        }
+      }
+    }
+  }
+  
+  // Step Details (collapsed)
+  md.push('<details>');
+  md.push('<summary><strong>📋 Step Execution Details</strong></summary>');
+  md.push('');
+  md.push('| # | Step | Status | Duration |');
+  md.push('|---|------|--------|----------|');
+  for (let i = 0; i < report.steps.length; i++) {
+    const step = report.steps[i];
+    const scenarioStep = scenario.steps.find(s => s.id === step.stepId);
+    const statusIcon = step.status === 'passed' ? '✅' : '❌';
+    const duration = step.duration ? `${step.duration}ms` : '-';
+    const description = scenarioStep?.description || step.stepId;
+    md.push(`| ${i + 1} | ${description} | ${statusIcon} | ${duration} |`);
+  }
+  md.push('');
+  md.push('</details>');
+  md.push('');
+  
+  // Artifacts
+  md.push('## 📁 Artifacts');
+  md.push('');
+  md.push(`- **Screenshots:** ${report.artifacts.screenshots.length} captured`);
+  md.push(`- **Logs:** \`${report.artifacts.logs || 'N/A'}\``);
+  if (report.artifacts.video) {
+    md.push(`- **Video:** \`${report.artifacts.video}\``);
+  }
+  md.push('');
+  
+  // Footer
+  md.push('---');
+  md.push(`*Generated by scenario-grader @ ${new Date().toISOString()}*`);
+  
+  return md.join('\n');
 }
