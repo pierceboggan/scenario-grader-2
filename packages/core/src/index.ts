@@ -1,7 +1,7 @@
 // Types
 export * from './types';
 
-// Parser & Validation
+// Parser & Schema Validation
 export { 
   parseScenarioYAML, 
   parseScenarioFile, 
@@ -14,6 +14,13 @@ export {
   type ParseErrorDetail,
   type ValidationResult,
 } from './parser';
+
+// Semantic Validation
+export {
+  validateScenarioSemantics,
+  formatValidationResult,
+  type ExtendedValidationResult,
+} from './validator';
 
 // Natural Language Compiler
 export { compileNaturalLanguage, generateScenarioDiff } from './compiler';
@@ -69,3 +76,16 @@ export {
 
 // Sample Scenarios
 export { SAMPLE_SCENARIOS, getSampleScenario, getAllSampleScenarios } from './samples';
+
+// Handoff & Gap Analysis
+export {
+  generateScenarioPrompt,
+  generateImplementationPrompt,
+  generateGapReport,
+  formatGapReport,
+  compareIterations,
+  type NaturalLanguageScenario,
+  type GapReport,
+  type GapReportItem,
+  type IterationRecord,
+} from './handoff';

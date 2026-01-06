@@ -115,14 +115,19 @@ switch (step.action) {
 
 ### Taking Screenshots
 
-After every step, we grab a picture:
+After every step, we grab a picture using Electron's native capture:
 
 ```javascript
-await page.screenshot({ 
-  path: '/path/to/screenshots/001_step-name.png',
-  fullPage: true  // Get the whole window
+// Use Electron's native capturePage for full window screenshots
+const browserWindow = await app.browserWindow(page);
+const nativeImage = await browserWindow.evaluate(async (win) => {
+  const image = await win.webContents.capturePage();
+  return image.toPNG().toString('base64');
 });
+fs.writeFileSync(screenshotPath, Buffer.from(nativeImage, 'base64'));
 ```
+
+This uses Electron's native `capturePage()` API instead of Playwright's `fullPage` option, which doesn't work correctly for Electron apps (see [playwright#11041](https://github.com/microsoft/playwright/issues/11041)).
 
 This is super helpful for debugging - you can see exactly what the robot saw!
 

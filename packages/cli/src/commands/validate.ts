@@ -20,7 +20,7 @@ export async function validateCommand(
     console.log(chalk.green(`✓ Valid scenario: ${scenario.name}`));
     console.log(chalk.gray(`  ID: ${scenario.id}`));
     console.log(chalk.gray(`  Steps: ${scenario.steps.length}`));
-    console.log(chalk.gray(`  Assertions: ${scenario.assertions.length}`));
+    console.log(chalk.gray(`  Assertions: ${(scenario.assertions || []).length}`));
   } catch (error) {
     console.log(chalk.red(`✗ Invalid scenario: ${error}`));
     process.exit(1);

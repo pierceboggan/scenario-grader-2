@@ -1,13 +1,13 @@
 id: copilot-chat-code-generation
 name: "Generate Code via Copilot Chat"
 owner: "@copilot-team"
-tags: [copilot, chat, code-generation, ai]
+tags: [copilot, chat, code-generation]
 priority: P0
 
 description: >
-  Tests the end-to-end experience of using Copilot Chat to generate 
-  code from a natural language prompt. Validates response quality, 
-  code insertion, and user experience.
+  A user asks Copilot Chat to write a function. Captures the 
+  end-to-end experience of prompting for code and receiving
+  a working implementation.
 
 environment:
   vscodeTarget: desktop
@@ -20,46 +20,42 @@ preconditions:
   - "User authenticated to GitHub Copilot"
 
 steps:
-  - id: launch
-    description: "Launch VS Code"
-    action: launchVSCodeWithProfile
-    args: {}
-    timeout: 10000
-
   - id: open_chat
     description: "Open Copilot Chat"
     action: openCopilotChat
     hints:
       - type: keyboard
         keys: ["cmd+shift+i"]
-    timeout: 3000
+    timeout: 5000
 
   - id: send_prompt
-    description: "Send a code generation prompt"
+    description: "Ask for a code snippet"
     action: sendChatMessage
     args:
       message: "Write a TypeScript function that validates email addresses"
       waitForResponse: true
     timeout: 30000
 
-  - id: wait_response
-    description: "Wait for response"
-    action: wait
-    args:
-      duration: 5000
-
-assertions:
-  - id: llm_quality_check
-    type: llmGrade
-    expected: ">=85"
-    required: false
+observations:
+  - id: response_time
+    question: "How long did it take to get a response?"
+    category: performance
+  - id: code_block_visible
+    question: "Is the generated code in a clearly formatted code block?"
+    category: clarity
+  - id: copy_button
+    question: "Is there an easy way to copy the code?"
+    category: usability
+  - id: insert_option
+    question: "Can the user insert the code directly into a file?"
+    category: usability
 
 outputs:
   captureVideo: true
   screenshots:
     - atStep: open_chat
       name: "chat-open"
-    - atStep: wait_response
+    - atStep: send_prompt
       name: "code-generated"
   storeChatTranscript: true
   storeLogs: true

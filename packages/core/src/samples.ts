@@ -54,14 +54,6 @@ export const SAMPLE_SCENARIOS: Scenario[] = [
         optional: false,
       },
     ],
-    assertions: [
-      {
-        id: 'llm_evaluation',
-        type: 'llmGrade',
-        rubricId: 'chat-experience',
-        required: false,
-      },
-    ],
     outputs: {
       captureVideo: false,
       screenshots: [
@@ -137,14 +129,6 @@ export const SAMPLE_SCENARIOS: Scenario[] = [
         action: 'wait',
         args: { duration: 3000 },
         optional: false,
-      },
-    ],
-    assertions: [
-      {
-        id: 'llm_evaluation',
-        type: 'llmGrade',
-        rubricId: 'extension-install-experience',
-        required: false,
       },
     ],
     outputs: {

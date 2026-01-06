@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { config as dotenvConfig } from 'dotenv';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { runCommand } from './commands/run.js';
@@ -8,6 +9,10 @@ import { validateCommand } from './commands/validate.js';
 import { createCommand } from './commands/create.js';
 import { showCommand } from './commands/show.js';
 import { recordCommand } from './commands/record.js';
+import { specCommand, authorCommand, gapCommand, workflowCommand } from './commands/handoff.js';
+
+// Load environment variables from .env file
+dotenvConfig();
 
 const program = new Command();
 
@@ -41,8 +46,11 @@ program
   .option('--no-artifacts', 'Disable artifact capture')
   .option('--fresh-profile', 'Use fresh VS Code profile (isolated, no extensions/auth)')
   .option('--video', 'Record video of the scenario run')
+  .option('--screenshot-method <method>', 'Screenshot capture method (electron|os|playwright)', 'electron')
   .option('-w, --watch', 'Watch mode - rerun on changes')
   .option('-o, --output <path>', 'Output directory for reports')
+  .option('--compare <versions>', 'Compare across VS Code versions (e.g., stable,insiders)')
+  .option('--validate', 'Only validate scenario without running')
   .action(runCommand);
 
 // List command
@@ -94,6 +102,42 @@ program
   .option('--yaml', 'Output as YAML')
   .option('--json', 'Output as JSON')
   .action(showCommand);
+
+// ============================================================================
+// PM Workflow Commands
+// ============================================================================
+
+// Author command (natural language scenario creation)
+program
+  .command('author')
+  .description('Create a scenario using natural language (for PMs)')
+  .option('-o, --output <path>', 'Output file for the prompt')
+  .action(authorCommand);
+
+// Spec command (generate implementation prompt)
+program
+  .command('spec')
+  .description('Generate implementation spec from a scenario')
+  .argument('<scenario-id>', 'Scenario ID')
+  .option('-o, --output <path>', 'Output file')
+  .option('--format <format>', 'Output format (markdown|json)', 'markdown')
+  .action(specCommand);
+
+// Gap command (show what's missing)
+program
+  .command('gap')
+  .description('Show gap report between scenario spec and implementation')
+  .argument('<scenario-id>', 'Scenario ID')
+  .argument('[run-id]', 'Specific run ID (defaults to most recent)')
+  .option('-o, --output <path>', 'Output file')
+  .option('--format <format>', 'Output format (markdown|json)', 'markdown')
+  .action(gapCommand);
+
+// Workflow command (show the full workflow)
+program
+  .command('workflow')
+  .description('Show the PM → LLM → Validate workflow')
+  .action(workflowCommand);
 
 // Parse and execute
 program.parse();

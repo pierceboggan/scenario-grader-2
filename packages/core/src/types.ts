@@ -41,6 +41,13 @@ export const HintSchema = z.object({
 });
 export type Hint = z.infer<typeof HintSchema>;
 
+// Step-level observation - a question to answer at a specific step
+export const StepObservationSchema = z.object({
+  question: z.string(),
+  category: z.enum(['usability', 'performance', 'clarity', 'friction']).optional(),
+});
+export type StepObservation = z.infer<typeof StepObservationSchema>;
+
 // Step Definition
 export const StepSchema = z.object({
   id: z.string(),
@@ -50,34 +57,54 @@ export const StepSchema = z.object({
   hints: z.array(HintSchema).optional(),
   timeout: z.number().optional(),
   optional: z.boolean().default(false),
+  // Observations specific to this step
+  observations: z.array(StepObservationSchema).optional(),
 });
 export type Step = z.infer<typeof StepSchema>;
 
-// Assertion Types
-export const AssertionTypeSchema = z.enum([
-  'accountEquals',
+// Checkpoint Types (optional validation points during a journey)
+export const CheckpointTypeSchema = z.enum([
   'elementVisible',
   'elementNotVisible',
   'textContains',
   'textEquals',
   'fileExists',
   'configEquals',
-  'llmGrade',
   'custom',
 ]);
-export type AssertionType = z.infer<typeof AssertionTypeSchema>;
+export type CheckpointType = z.infer<typeof CheckpointTypeSchema>;
 
-export const AssertionSchema = z.object({
+export const CheckpointSchema = z.object({
   id: z.string(),
-  type: AssertionTypeSchema,
+  type: CheckpointTypeSchema,
   target: z.string().optional(),
-  provider: z.string().optional(),
   expected: z.any().optional(),
-  rubricId: z.string().optional(),
-  required: z.boolean().default(true),
   description: z.string().optional(),
 });
-export type Assertion = z.infer<typeof AssertionSchema>;
+export type Checkpoint = z.infer<typeof CheckpointSchema>;
+
+// Observation - questions to answer about the user experience
+export const ObservationSchema = z.object({
+  id: z.string().optional(),
+  question: z.string(),
+  category: z.enum(['usability', 'performance', 'clarity', 'friction', 'terminology']).optional(),
+});
+export type Observation = z.infer<typeof ObservationSchema>;
+
+// Terminology check - compare UI strings against documentation
+export const TerminologyCheckSchema = z.object({
+  id: z.string().optional(),
+  uiElement: z.string().describe('Selector or description of UI element to check'),
+  expectedTerms: z.array(z.string()).describe('Terms that should appear based on docs'),
+  docSource: z.string().optional().describe('URL or path to documentation source'),
+});
+export type TerminologyCheck = z.infer<typeof TerminologyCheckSchema>;
+
+// Legacy Assertion Types (deprecated - use Checkpoint instead)
+export const AssertionTypeSchema = CheckpointTypeSchema;
+export type AssertionType = CheckpointType;
+export const AssertionSchema = CheckpointSchema;
+export type Assertion = Checkpoint;
 
 // Screenshot Configuration
 export const ScreenshotConfigSchema = z.object({
@@ -108,6 +135,13 @@ export const ScenarioSchema = z.object({
   environment: EnvironmentSchema.optional(),
   preconditions: z.array(z.string()).optional(),
   steps: z.array(StepSchema),
+  // New: optional checkpoints for validation
+  checkpoints: z.array(CheckpointSchema).optional(),
+  // New: observations to capture about UX
+  observations: z.array(ObservationSchema).optional(),
+  // New: terminology checks to compare UI against docs
+  terminologyChecks: z.array(TerminologyCheckSchema).optional(),
+  // Legacy: assertions (deprecated, use checkpoints)
   assertions: z.array(AssertionSchema).optional(),
   outputs: OutputsSchema.optional(),
 });
@@ -122,6 +156,8 @@ export type RunStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error' | 
 export type StepStatus = 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
 
 export type AssertionStatus = 'pending' | 'passed' | 'failed';
+
+export type CheckpointStatus = AssertionStatus;
 
 // ============================================================================
 // Result Types
@@ -144,6 +180,32 @@ export interface AssertionResult {
   actual?: any;
   expected?: any;
   error?: string;
+}
+
+export interface CheckpointResult {
+  checkpointId: string;
+  passed: boolean;
+  actual?: any;
+  expected?: any;
+  note?: string;
+}
+
+export interface ObservationResult {
+  observationId: string;
+  stepId?: string;
+  question: string;
+  answer: string;
+  category?: string;
+}
+
+export interface TerminologyResult {
+  checkId: string;
+  uiElement: string;
+  expectedTerms: string[];
+  actualText: string;
+  matches: boolean;
+  missingTerms: string[];
+  docSource?: string;
 }
 
 // ============================================================================
@@ -170,8 +232,66 @@ export interface LLMEvaluation {
   overallScore: number;
   dimensions: EvaluationDimension[];
   suggestions: Suggestion[];
+  // Structured observation answers
+  observations?: ObservationResult[];
+  // Terminology check results
+  terminologyResults?: TerminologyResult[];
   rawResponse?: string;
 }
+
+// ============================================================================
+// Validation Types
+// ============================================================================
+
+export type ValidationSeverity = 'error' | 'warning' | 'info';
+
+export interface ValidationIssue {
+  severity: ValidationSeverity;
+  message: string;
+  field?: string;
+  stepId?: string;
+  suggestion?: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  issues: ValidationIssue[];
+}
+
+// Known/supported actions for validation
+export const KNOWN_ACTIONS = [
+  'launchVSCodeWithProfile',
+  'openCommandPalette',
+  'openCopilotChat',
+  'openInlineChat',
+  'sendChatMessage',
+  'typeText',
+  'pressKey',
+  'wait',
+  'clickElement',
+  'selectFromList',
+  'selectFromDropdown',
+  'createFile',
+  'selectAll',
+  'openFile',
+  'openSettings',
+  'acceptSuggestion',
+  'setBreakpoint',
+  'runTerminalCommand',
+  'hover',
+  'githubLogin',
+  'signInWithGitHub',
+  // Semantic actions (high-level)
+  'clickModelPicker',
+  'selectModel',
+  'openExtensionsPanel',
+  'searchExtensions',
+  'installExtension',
+  'openAgentMode',
+  'startBackgroundAgent',
+] as const;
+
+export type KnownAction = typeof KNOWN_ACTIONS[number];
 
 // ============================================================================
 // Run Report Types
@@ -198,6 +318,8 @@ export interface RunReport {
   llmEvaluation?: LLMEvaluation;
   artifacts: RunArtifacts;
   error?: string;
+  // Comparison data if run with --compare
+  comparisonBaseline?: string;
 }
 
 // ============================================================================
@@ -236,7 +358,12 @@ export interface RunConfig {
   recordVideo?: boolean;
   /** GitHub authentication config for fresh profile scenarios */
   auth?: AuthConfig;
+  /** Preferred screenshot capture method (default: 'electron') */
+  screenshotMethod?: ScreenshotMethod;
 }
+
+// Screenshot capture method preference
+export type ScreenshotMethod = 'electron' | 'os' | 'playwright';
 
 // ============================================================================
 // GitHub Issue Types

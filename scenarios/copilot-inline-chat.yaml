@@ -1,13 +1,13 @@
 id: copilot-inline-chat
-name: "Use Inline Chat for Code Refactoring"
+name: "Refactor Code with Inline Chat"
 owner: "@copilot-team"
-tags: [copilot, inline-chat, refactoring, ai]
+tags: [copilot, inline-chat, refactoring]
 priority: P0
 
 description: >
-  Tests the inline chat experience where users can select code and use
-  Cmd+I to open inline chat for targeted code modifications. Validates
-  the ability to refactor or modify selected code using natural language.
+  A user selects some code and uses inline chat (Cmd+I) to ask 
+  Copilot to add TypeScript types. Captures the flow of selecting,
+  prompting, reviewing, and accepting changes.
 
 environment:
   vscodeTarget: desktop
@@ -20,36 +20,11 @@ preconditions:
   - "User authenticated to GitHub Copilot"
 
 steps:
-  - id: launch
-    description: "Launch VS Code"
-    action: launchVSCodeWithProfile
-    args: {}
-    timeout: 10000
-
   - id: create_file
-    description: "Create a new file"
-    action: openCommandPalette
-    timeout: 3000
-
-  - id: new_file_command
-    description: "Run new untitled file command"
-    action: typeText
+    description: "Create a new file with sample code"
+    action: createFile
     args:
-      text: "New Untitled Text File"
-    timeout: 2000
-
-  - id: select_new_file
-    description: "Select new file option"
-    action: pressKey
-    args:
-      key: Enter
-    timeout: 2000
-
-  - id: type_sample_code
-    description: "Type sample code to refactor"
-    action: typeText
-    args:
-      text: |
+      content: |
         function add(a, b) {
           return a + b;
         }
@@ -59,66 +34,67 @@ steps:
         }
     timeout: 3000
 
-  - id: select_all_code
+  - id: select_all
     description: "Select all code"
-    action: pressKey
-    args:
-      key: Meta+A
+    action: selectAll
     timeout: 1000
 
   - id: open_inline_chat
-    description: "Open inline chat with Cmd+I"
+    description: "Open inline chat"
     action: openInlineChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+i"]
     timeout: 3000
 
-  - id: enter_refactor_prompt
-    description: "Enter refactoring prompt"
+  - id: ask_for_types
+    description: "Ask to add TypeScript types"
     action: typeText
     args:
       text: "Add TypeScript types to these functions"
     timeout: 2000
 
-  - id: submit_prompt
-    description: "Submit the inline chat prompt"
+  - id: submit
+    description: "Submit the request"
     action: pressKey
     args:
       key: Enter
     timeout: 10000
 
-  - id: wait_for_response
-    description: "Wait for inline chat response"
+  - id: review_changes
+    description: "Review the suggested changes"
     action: wait
     args:
-      duration: 8000
+      duration: 3000
 
-  - id: accept_changes
-    description: "Accept the suggested changes"
+  - id: accept
+    description: "Accept the changes"
     action: pressKey
     args:
       key: Enter
     timeout: 2000
 
-  - id: wait_final
-    description: "Wait for final state"
-    action: wait
-    args:
-      duration: 2000
-
-assertions:
-  - id: llm_quality_check
-    type: llmGrade
-    expected: ">=80"
-    required: false
-    description: "Verify inline chat provided relevant TypeScript refactoring"
+observations:
+  - id: diff_visibility
+    question: "Are the proposed changes shown as a clear diff?"
+    category: clarity
+  - id: accept_reject_options
+    question: "Are Accept/Reject options easily discoverable?"
+    category: usability
+  - id: partial_accept
+    question: "Can the user accept only some of the changes?"
+    category: usability
+  - id: undo_available
+    question: "Is it easy to undo if the user changes their mind?"
+    category: friction
 
 outputs:
   captureVideo: true
   screenshots:
     - atStep: open_inline_chat
       name: "inline-chat-opened"
-    - atStep: wait_for_response
-      name: "refactoring-suggested"
-    - atStep: wait_final
+    - atStep: review_changes
+      name: "changes-proposed"
+    - atStep: accept
       name: "changes-accepted"
-  storeChatTranscript: true
   storeLogs: true

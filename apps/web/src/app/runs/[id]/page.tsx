@@ -97,6 +97,7 @@ export default function RunDetailPage({
 }) {
   const { id: _id } = use(params);
   const [expandedSteps, setExpandedSteps] = useState<number[]>([]);
+  const [brokenScreenshots, setBrokenScreenshots] = useState<Record<number, boolean>>({});
   
   // In real app, fetch run by id using _id
   const run = runData;
@@ -246,9 +247,18 @@ export default function RunDetailPage({
                                   <ImageIcon className="h-4 w-4" />
                                   Screenshot
                                 </h4>
-                                <div className="rounded-md bg-muted h-32 flex items-center justify-center text-muted-foreground text-sm">
-                                  Screenshot not available
-                                </div>
+                                {step.screenshot && !brokenScreenshots[step.id] ? (
+                                  <img
+                                    src={step.screenshot}
+                                    alt={`Step ${step.id} screenshot`}
+                                    className="rounded-md object-contain max-h-64 w-full"
+                                    onError={() => setBrokenScreenshots(prev => ({ ...prev, [step.id]: true }))}
+                                  />
+                                ) : (
+                                  <div className="rounded-md bg-muted h-32 flex items-center justify-center text-muted-foreground text-sm">
+                                    Screenshot not available
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>

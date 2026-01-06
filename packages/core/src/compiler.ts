@@ -231,21 +231,11 @@ function extractTags(input: string): string[] {
 function generateDefaultAssertions(_steps: Step[]): Scenario['assertions'] {
   const assertions: Scenario['assertions'] = [];
   
-  // Add a completion assertion
+  // Add a completion checkpoint
   assertions.push({
     id: 'scenario_completes',
     type: 'custom',
     description: 'Scenario completes without errors',
-    required: true,
-  });
-  
-  // Add LLM evaluation
-  assertions.push({
-    id: 'llm_evaluation',
-    type: 'llmGrade',
-    rubricId: 'general-ux',
-    required: false,
-    description: 'LLM evaluates overall experience quality',
   });
   
   return assertions;

@@ -10,6 +10,7 @@ import {
 } from './types';
 import { nanoid } from 'nanoid';
 import { _electron as electron, ElectronApplication, Page, chromium, Browser } from 'playwright';
+import { ScreenshotMethod } from './types';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -213,6 +214,68 @@ interface VSCodeContext {
   videoPath?: string;
   /** Auth config for GitHub login (from env vars or config) */
   auth?: AuthConfig;
+  /** Preferred screenshot method for this run */
+  screenshotMethod?: ScreenshotMethod;
+}
+
+/**
+ * Take a screenshot of the Electron window using native capture
+ * This ensures we get the full window content, not just the viewport
+ */
+async function takeNativeScreenshot(
+  app: ElectronApplication,
+  page: Page,
+  screenshotPath: string,
+  preferredMethod: ScreenshotMethod = 'electron'
+): Promise<void> {
+  const orders: Record<ScreenshotMethod, Array<'electron' | 'os' | 'playwright'>> = {
+    electron: ['electron', 'os', 'playwright'],
+    os: ['os', 'electron', 'playwright'],
+    playwright: ['playwright', 'electron', 'os'],
+  };
+
+  const tryOrder = orders[preferredMethod] || orders.electron;
+
+  for (const method of tryOrder) {
+    try {
+      if (method === 'electron') {
+        const browserWindow = await app.browserWindow(page);
+        const nativeImage = await browserWindow.evaluate(async (win: any) => {
+          const image = await win.webContents.capturePage();
+          return image.toPNG().toString('base64');
+        });
+        const buffer = Buffer.from(nativeImage, 'base64');
+        fs.writeFileSync(screenshotPath, buffer);
+        return;
+      }
+
+      if (method === 'os') {
+        const sdMod = await import('screenshot-desktop');
+        const sd = (sdMod && (sdMod as any).default) ? (sdMod as any).default : sdMod;
+        const img = await sd({ format: 'png' }) as Buffer | string;
+        if (Buffer.isBuffer(img)) {
+          fs.writeFileSync(screenshotPath, img);
+          return;
+        }
+        if (typeof img === 'string') {
+          try {
+            fs.writeFileSync(screenshotPath, Buffer.from(img, 'base64'));
+            return;
+          } catch {}
+        }
+      }
+
+      if (method === 'playwright') {
+        await page.screenshot({ path: screenshotPath });
+        return;
+      }
+    } catch (e) {
+      // continue to next method
+      continue;
+    }
+  }
+
+  throw new RunnerError('Failed to capture screenshot via any method', 'STEP_FAILED', true);
 }
 
 export interface LaunchOptions {
@@ -234,7 +297,7 @@ async function launchVSCode(
   options: LaunchOptions = {}
 ): Promise<VSCodeContext> {
   // Default to using existing profile (already authenticated)
-  const { freshProfile = false, recordVideo = false, auth } = options;
+  const { freshProfile = false, recordVideo = false, auth, screenshotMethod } = options;
   
   const artifactsPath = path.join(ARTIFACTS_DIR, runId);
   fs.mkdirSync(artifactsPath, { recursive: true });
@@ -313,13 +376,34 @@ async function launchVSCode(
     timeout: 60000,
     recordVideo: recordVideo ? {
       dir: videosDir,
-      size: { width: 1280, height: 720 },
+      size: { width: 1920, height: 1080 },
     } : undefined,
   });
 
   // Get the main window
   const page = await app.firstWindow();
   page.setDefaultTimeout(30000);
+  
+  // Maximize the window to capture full VS Code UI
+  try {
+    const browserWindow = await app.browserWindow(page);
+    await browserWindow.evaluate((win: any) => {
+      win.maximize();
+    });
+    // Wait for window to finish maximizing
+    await page.waitForTimeout(500);
+    emit({
+      type: 'log',
+      timestamp: new Date().toISOString(),
+      data: { message: 'Window maximized for full screenshot capture' },
+    });
+  } catch (err) {
+    emit({
+      type: 'log',
+      timestamp: new Date().toISOString(),
+      data: { message: 'Could not maximize window, using default size' },
+    });
+  }
   
   if (recordVideo) {
     emit({
@@ -360,6 +444,7 @@ async function launchVSCode(
     screenshotCounter: 0,
     videoPath: recordVideo ? videosDir : undefined,
     auth,
+    screenshotMethod,
   };
 }
 
@@ -436,7 +521,12 @@ async function performGitHubLogin(
   log('Checking for external URL confirmation dialog...');
   
   const screenshotPath = `${ctx.artifactsPath}/screenshots/auth_dialog.png`;
-  await vscodePage.screenshot({ path: screenshotPath });
+  try {
+    await takeNativeScreenshot(ctx.app, vscodePage, screenshotPath, ctx.screenshotMethod ?? 'electron');
+  } catch {
+    // fallback to playwright screenshot if something goes wrong
+    try { await vscodePage.screenshot({ path: screenshotPath }); } catch {}
+  }
   log(`Auth dialog screenshot: ${screenshotPath}`);
   
   await vscodePage.keyboard.press('Enter');
@@ -820,6 +910,232 @@ async function executeStep(
         }
         break;
         
+      case 'selectFromList':
+        // Select an item from a dropdown or list by index
+        const selectIndex = args.index ?? 0;
+        log(`Selecting item at index ${selectIndex} from list`);
+        for (let i = 0; i < selectIndex; i++) {
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(100);
+        }
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(300);
+        break;
+        
+      case 'selectFromDropdown':
+        // Click a dropdown, then select by index or text
+        const dropdownSelector = args.selector || args.target;
+        const itemIndex = args.index ?? 0;
+        log(`Opening dropdown and selecting item ${itemIndex}`);
+        if (dropdownSelector) {
+          await clickElement(page, dropdownSelector, log);
+          await page.waitForTimeout(500);
+        }
+        for (let i = 0; i < itemIndex; i++) {
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(100);
+        }
+        await page.keyboard.press('Enter');
+        break;
+        
+      case 'createFile':
+        // Create a new file with optional content
+        log('Creating new file');
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+N' : 'Control+N');
+        await page.waitForTimeout(500);
+        if (args.content) {
+          log('Typing file content');
+          await page.keyboard.type(args.content, { delay: 10 });
+        }
+        break;
+        
+      case 'selectAll':
+        log('Selecting all text');
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+        await page.waitForTimeout(200);
+        break;
+        
+      // ============================================================
+      // Semantic Actions - High-level, self-discovering UI actions
+      // ============================================================
+        
+      case 'clickModelPicker':
+        log('Opening model picker in Copilot Chat');
+        // Try multiple selectors for the model picker button
+        // The model picker is typically in the chat input area showing current model name
+        const modelPickerSelectors = [
+          // VS Code 2024+ model picker selectors
+          '.chat-input-toolbars button[aria-haspopup="true"]',
+          '.chat-model-picker-button',
+          '[aria-label*="model" i]',
+          '[aria-label*="Model" i]',
+          '[aria-label="Pick model"]',
+          '[aria-label="Select model"]',
+          '[aria-label="Choose model"]',
+          // Look for buttons containing model names
+          '.chat-input-toolbars button:has-text("GPT")',
+          '.chat-input-toolbars button:has-text("Claude")',
+          '.chat-input-toolbars button:has-text("o1")',
+          '.chat-input-toolbars button:has-text("Sonnet")',
+          '.chat-input-toolbars button:has-text("Opus")',
+          // Generic chat toolbar buttons
+          '.interactive-input-part button[aria-haspopup]',
+          '.monaco-action-bar .action-item[aria-haspopup="true"]',
+        ];
+        let modelPickerFound = false;
+        for (const selector of modelPickerSelectors) {
+          try {
+            const el = await page.$(selector);
+            if (el && await el.isVisible()) {
+              await el.click();
+              modelPickerFound = true;
+              log(`Found model picker with selector: ${selector}`);
+              await page.waitForTimeout(500);
+              break;
+            }
+          } catch { /* continue */ }
+        }
+        if (!modelPickerFound) {
+          log('Model picker button not found via selectors, trying command palette');
+          // Fallback: use command palette with known command names
+          await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
+          await page.waitForTimeout(500);
+          // Try "Copilot: Change Language Model" or similar
+          await page.keyboard.type('change model', { delay: 30 });
+          await page.waitForTimeout(500);
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(500);
+          log('Used command palette fallback for model picker');
+        }
+        // Verify dropdown appeared
+        const dropdownVisible = await page.$('.monaco-list, .quick-input-list, [role="listbox"]');
+        if (dropdownVisible) {
+          log('Model dropdown is now visible');
+        } else {
+          log('⚠️  Warning: Model dropdown may not have opened');
+        }
+        break;
+        
+      case 'selectModel':
+        const modelName = args.model || args.name;
+        log(`Selecting model: ${modelName || 'different from current'}`);
+        
+        // Wait a moment for the dropdown to be ready
+        await page.waitForTimeout(300);
+        
+        if (modelName) {
+          // Try to find and click the model by name in the dropdown
+          const modelSelectors = [
+            `[role="option"]:has-text("${modelName}")`,
+            `.monaco-list-row:has-text("${modelName}")`,
+            `.quick-input-list .monaco-list-row:has-text("${modelName}")`,
+            `text="${modelName}"`,
+          ];
+          
+          let modelFound = false;
+          for (const selector of modelSelectors) {
+            try {
+              const modelOption = await page.$(selector);
+              if (modelOption && await modelOption.isVisible()) {
+                await modelOption.click();
+                modelFound = true;
+                log(`Selected model "${modelName}" using selector: ${selector}`);
+                break;
+              }
+            } catch { /* continue */ }
+          }
+          
+          if (!modelFound) {
+            // Type to filter and select
+            log(`Model "${modelName}" not found directly, typing to filter`);
+            await page.keyboard.type(modelName, { delay: 30 });
+            await page.waitForTimeout(500);
+            await page.keyboard.press('Enter');
+          }
+        } else {
+          // Select a different model than the currently selected one
+          // Move down to select a different option
+          log('No specific model requested, selecting next available model');
+          await page.keyboard.press('ArrowDown');
+          await page.waitForTimeout(200);
+          await page.keyboard.press('Enter');
+        }
+        await page.waitForTimeout(500);
+        
+        // Verify selection by checking if dropdown closed
+        const dropdownStillOpen = await page.$('.quick-input-list:visible, [role="listbox"]:visible');
+        if (!dropdownStillOpen) {
+          log('Model selection completed (dropdown closed)');
+        } else {
+          log('⚠️  Warning: Dropdown may still be open after selection');
+          // Try pressing Escape to close
+          await page.keyboard.press('Escape');
+        }
+        break;
+        
+      case 'openExtensionsPanel':
+        log('Opening Extensions panel');
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+X' : 'Control+Shift+X');
+        await page.waitForTimeout(1000);
+        break;
+        
+      case 'searchExtensions':
+        const searchQuery = args.query || args.text;
+        log(`Searching extensions: ${searchQuery}`);
+        // Focus search box
+        const searchBox = await page.$('input[placeholder*="Search Extensions"]');
+        if (searchBox) {
+          await searchBox.click();
+          await searchBox.fill(searchQuery);
+        } else {
+          await page.keyboard.type(searchQuery, { delay: 30 });
+        }
+        await page.waitForTimeout(1500);
+        break;
+        
+      case 'installExtension':
+        const extName = args.name || args.extension;
+        log(`Installing extension: ${extName}`);
+        // Click install button
+        const installButtons = await page.$$('text="Install"');
+        if (installButtons.length > 0) {
+          await installButtons[0].click();
+          log('Clicked install button');
+        }
+        await page.waitForTimeout(2000);
+        break;
+        
+      case 'openAgentMode':
+        log('Opening Agent mode');
+        // Look for agent mode toggle or button
+        const agentSelectors = [
+          '[aria-label="Agent Mode"]',
+          'button:has-text("Agent")',
+          '.agent-mode-toggle',
+        ];
+        for (const selector of agentSelectors) {
+          try {
+            const el = await page.$(selector);
+            if (el) {
+              await el.click();
+              log(`Found agent mode with: ${selector}`);
+              break;
+            }
+          } catch { /* continue */ }
+        }
+        await page.waitForTimeout(500);
+        break;
+        
+      case 'startBackgroundAgent':
+        log('Starting background agent');
+        // Look for background agent option
+        await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P');
+        await page.waitForTimeout(300);
+        await page.keyboard.type('Copilot: Start Background Agent', { delay: 30 });
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(1000);
+        break;
+        
       case 'githubLogin':
         await performGitHubLogin(page, ctx, log);
         break;
@@ -832,16 +1148,19 @@ async function executeStep(
         log(`Unknown action: ${step.action} - skipping`);
     }
     
-    // Take screenshot after step
+    // Take screenshot after step (auto-capture for steps with observations)
+    const hasObservations = step.observations && step.observations.length > 0;
     ctx.screenshotCounter++;
     const screenshotPath = path.join(
       ctx.artifactsPath, 
       'screenshots', 
-      `${String(ctx.screenshotCounter).padStart(3, '0')}_${step.id}.png`
+      `${String(ctx.screenshotCounter).padStart(3, '0')}_${step.id}${hasObservations ? '_observed' : ''}.png`
     );
-    await ctx.page.screenshot({ path: screenshotPath, fullPage: true });
+    // Use configured screenshot method to capture full window content
+    await takeNativeScreenshot(ctx.app, ctx.page, screenshotPath, ctx.screenshotMethod ?? 'electron');
     screenshot = screenshotPath;
-    log(`Screenshot: ${screenshotPath}`);
+    log(`Screenshot: ${screenshotPath}${hasObservations ? ' (has observations)' : ''}`);
+    
     
     emit({
       type: 'screenshot',
@@ -877,7 +1196,7 @@ async function executeStep(
     
     try {
       const failPath = path.join(ctx.artifactsPath, 'screenshots', `FAIL_${step.id}.png`);
-      await ctx.page.screenshot({ path: failPath, fullPage: true });
+      await takeNativeScreenshot(ctx.app, ctx.page, failPath, ctx.screenshotMethod ?? 'electron');
       screenshot = failPath;
       log(`Failure screenshot: ${failPath}`);
     } catch {
@@ -964,11 +1283,6 @@ async function executeAssertion(
         }
         break;
         
-      case 'llmGrade':
-        passed = true;
-        actual = 'LLM evaluation skipped';
-        break;
-        
       default:
         passed = true;
         actual = `Assertion type "${assertion.type}" not yet implemented`;
@@ -1026,6 +1340,7 @@ export async function runScenario(
       freshProfile: config.freshProfile ?? false,
       recordVideo: config.recordVideo ?? false,
       auth: config.auth,
+      screenshotMethod: config.screenshotMethod,
     });
     
     for (const step of scenario.steps) {
@@ -1048,9 +1363,9 @@ export async function runScenario(
         const result = await executeAssertion(assertion, ctx, emit);
         assertionResults.push(result);
         
-        if (!result.passed && assertion.required) {
+        if (!result.passed) {
           status = 'failed';
-          error = result.error || `Assertion failed: ${assertion.id}`;
+          error = result.error || `Checkpoint failed: ${assertion.id}`;
           break;
         }
       }

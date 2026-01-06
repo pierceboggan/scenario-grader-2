@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import fs from 'fs';
 import path from 'path';
-import { parseScenarioFile, runScenario, RunConfig, Scenario, evaluateScenarioRun } from '@scenario-grader/core';
+import { parseScenarioFile, runScenario, RunConfig, Scenario, evaluateScenarioRun, validateScenarioSemantics, formatValidationResult } from '@scenario-grader/core';
 
 interface RunOptions {
   vscodeVersion?: string;
@@ -16,6 +16,9 @@ interface RunOptions {
   output?: string;
   all?: boolean;
   tag?: string;
+  compare?: string;
+  validate?: boolean;
+  screenshotMethod?: 'electron' | 'os' | 'playwright';
 }
 
 /**
@@ -41,9 +44,32 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
     
     if (scenarioId.endsWith('.yaml') || scenarioId.endsWith('.yml')) {
       // Load from file
-      const filePath = path.resolve(scenarioId);
+      let filePath = path.resolve(scenarioId);
+      
+      // If not found, search upward for scenarios directory
       if (!fs.existsSync(filePath)) {
-        spinner.fail(`Scenario file not found: ${filePath}`);
+        let searchDir = process.cwd();
+        for (let i = 0; i < 5; i++) {
+          const altPath = path.join(searchDir, scenarioId);
+          if (fs.existsSync(altPath)) {
+            filePath = altPath;
+            break;
+          }
+          const scenariosPath = path.join(searchDir, 'scenarios', path.basename(scenarioId));
+          if (fs.existsSync(scenariosPath)) {
+            filePath = scenariosPath;
+            break;
+          }
+          const parentDir = path.dirname(searchDir);
+          if (parentDir === searchDir) break; // Reached root
+          searchDir = parentDir;
+        }
+      }
+      
+      if (!fs.existsSync(filePath)) {
+        spinner.fail(`Scenario file not found: ${scenarioId}`);
+        console.log(chalk.dim(`  Tried: ${path.resolve(scenarioId)}`));
+        console.log(chalk.dim(`  Tip: Use absolute path or run from workspace root`));
         process.exit(1);
       }
       scenario = parseScenarioFile(filePath);
@@ -59,10 +85,16 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
       
       let found: Scenario | null = null;
       for (const file of files) {
-        const s = parseScenarioFile(path.join(scenariosDir, file));
-        if (s.id === scenarioId || file.replace(/\.ya?ml$/, '') === scenarioId) {
-          found = s;
-          break;
+        try {
+          const s = parseScenarioFile(path.join(scenariosDir, file));
+          if (s.id === scenarioId || file.replace(/\.ya?ml$/, '') === scenarioId) {
+            found = s;
+            break;
+          }
+        } catch {
+          // Skip scenarios that fail to parse when searching by ID
+          // The target scenario will be validated properly when found
+          continue;
         }
       }
       
@@ -75,6 +107,23 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
     
     spinner.succeed(`Loaded scenario: ${chalk.cyan(scenario.name)}`);
     
+    // Validate scenario before running
+    const validation = validateScenarioSemantics(scenario);
+    if (!validation.valid) {
+      console.log('');
+      console.log(chalk.red(formatValidationResult(validation)));
+      process.exit(1);
+    } else if (validation.issues.length > 0) {
+      console.log('');
+      console.log(chalk.yellow(formatValidationResult(validation)));
+    }
+    
+    // Handle --compare flag
+    if (options.compare) {
+      await runComparison(scenario, options);
+      return;
+    }
+    
     // Build run configuration
     const config: RunConfig = {
       scenarioId: scenario.id,
@@ -84,6 +133,7 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
       enableLLMGrading: options.llm !== false, // Enabled by default, use --no-llm to disable
       freshProfile: options.freshProfile || false,
       recordVideo: options.video || false,
+      screenshotMethod: options.screenshotMethod || undefined,
     };
     
     console.log('');
@@ -179,6 +229,13 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
     }
     
     // Artifacts
+    // Show error if present
+    if (report.error) {
+      console.log(chalk.bold('  Error:'));
+      console.log(chalk.red(`    ${report.error}`));
+      console.log('');
+    }
+    
     console.log(chalk.bold('  Artifacts:'));
     console.log(`    ${chalk.gray('Screenshots:')} ${report.artifacts.screenshots.length} captured`);
     console.log(`    ${chalk.gray('Logs:')}        ${report.artifacts.logs}`);
@@ -310,6 +367,25 @@ function generateMarkdownReport(scenario: Scenario, report: any): string {
   }
   md.push('');
   
+  // Screenshots section - embed full images
+  if (report.artifacts.screenshots && report.artifacts.screenshots.length > 0) {
+    md.push('## 📸 Screenshots');
+    md.push('');
+    for (let i = 0; i < report.artifacts.screenshots.length; i++) {
+      const screenshotPath = report.artifacts.screenshots[i];
+      const scenarioStep = scenario.steps[i];
+      const stepDescription = scenarioStep?.description || `Step ${i + 1}`;
+      
+      // Use relative path for the image (screenshots folder is in same dir as REPORT.md)
+      const relativePath = `screenshots/${path.basename(screenshotPath)}`;
+      
+      md.push(`### Step ${i + 1}: ${stepDescription}`);
+      md.push('');
+      md.push(`![${stepDescription}](${relativePath})`);
+      md.push('');
+    }
+  }
+  
   // LLM Evaluation Details
   if (report.llmEvaluation) {
     md.push('## 🎯 Developer Experience Evaluation');
@@ -325,6 +401,91 @@ function generateMarkdownReport(scenario: Scenario, report: any): string {
       md.push(`| ${dim.name} | ${dim.score}/5 ${emoji} | ${dim.feedback} |`);
     }
     md.push('');
+    
+    // Observations from the scenario - answers from LLM
+    const hasObservations = report.llmEvaluation.observations && report.llmEvaluation.observations.length > 0;
+    const scenarioHasObservations = scenario.observations && scenario.observations.length > 0;
+    const stepsHaveObservations = scenario.steps.some(s => s.observations && s.observations.length > 0);
+    
+    if (hasObservations || scenarioHasObservations || stepsHaveObservations) {
+      md.push('## 🔍 Observation Analysis');
+      md.push('');
+      md.push('*Answers to specific questions defined in the scenario*');
+      md.push('');
+      
+      if (hasObservations) {
+        // Group observations by step
+        const stepObservations: { [key: string]: any[] } = {};
+        const generalObservations: any[] = [];
+        
+        for (const obs of report.llmEvaluation.observations) {
+          if (obs.stepId) {
+            if (!stepObservations[obs.stepId]) {
+              stepObservations[obs.stepId] = [];
+            }
+            stepObservations[obs.stepId].push(obs);
+          } else {
+            generalObservations.push(obs);
+          }
+        }
+        
+        // Render step-specific observations
+        for (const [stepId, observations] of Object.entries(stepObservations)) {
+          const step = scenario.steps.find(s => s.id === stepId);
+          const stepTitle = step?.description || stepId;
+          md.push(`### At step: ${stepTitle}`);
+          md.push('');
+          for (const obs of observations as any[]) {
+            md.push(`**Q:** ${obs.question}`);
+            md.push('');
+            md.push(`**A:** ${obs.answer}`);
+            if (obs.category) {
+              md.push(`\n*Category: ${obs.category}*`);
+            }
+            md.push('');
+          }
+        }
+        
+        // Render general/scenario-level observations
+        if (generalObservations.length > 0) {
+          md.push('### Overall Observations');
+          md.push('');
+          for (const obs of generalObservations) {
+            md.push(`**Q:** ${obs.question}`);
+            md.push('');
+            md.push(`**A:** ${obs.answer}`);
+            if (obs.category) {
+              md.push(`\n*Category: ${obs.category}*`);
+            }
+            md.push('');
+          }
+        }
+      } else {
+        // LLM didn't return observations - list what was expected
+        md.push('*Note: LLM evaluation did not return observation answers. Expected observations:*');
+        md.push('');
+        
+        if (scenarioHasObservations) {
+          md.push('**Scenario-level:**');
+          for (const obs of scenario.observations!) {
+            md.push(`- ${obs.question}`);
+          }
+          md.push('');
+        }
+        
+        if (stepsHaveObservations) {
+          for (const step of scenario.steps) {
+            if (step.observations && step.observations.length > 0) {
+              md.push(`**At ${step.description}:**`);
+              for (const obs of step.observations) {
+                md.push(`- ${obs.question}`);
+              }
+              md.push('');
+            }
+          }
+        }
+      }
+    }
     
     // Suggestions
     if (report.llmEvaluation.suggestions.length > 0) {
@@ -343,6 +504,18 @@ function generateMarkdownReport(scenario: Scenario, report: any): string {
           md.push('');
         }
       }
+    }
+    
+    // Terminology Issues
+    if (report.llmEvaluation.terminologyResults && report.llmEvaluation.terminologyResults.length > 0) {
+      md.push('## 📝 Terminology Issues');
+      md.push('');
+      md.push('| UI Element | Expected | Actual | Suggestion |');
+      md.push('|------------|----------|--------|------------|');
+      for (const term of report.llmEvaluation.terminologyResults) {
+        md.push(`| ${term.uiElement} | ${term.expectedTerms?.join(', ') || '-'} | ${term.actualText || '-'} | ${term.suggestion || '-'} |`);
+      }
+      md.push('');
     }
   }
   
@@ -364,10 +537,10 @@ function generateMarkdownReport(scenario: Scenario, report: any): string {
   md.push('</details>');
   md.push('');
   
-  // Artifacts
+  // Artifacts summary
   md.push('## 📁 Artifacts');
   md.push('');
-  md.push(`- **Screenshots:** ${report.artifacts.screenshots.length} captured`);
+  md.push(`- **Screenshots:** ${report.artifacts.screenshots.length} captured (see above)`);
   md.push(`- **Logs:** \`${report.artifacts.logs || 'N/A'}\``);
   if (report.artifacts.video) {
     md.push(`- **Video:** \`${report.artifacts.video}\``);
@@ -379,4 +552,104 @@ function generateMarkdownReport(scenario: Scenario, report: any): string {
   md.push(`*Generated by scenario-grader @ ${new Date().toISOString()}*`);
   
   return md.join('\n');
+}
+
+/**
+ * Run scenario on multiple VS Code versions and compare results
+ */
+async function runComparison(scenario: Scenario, options: RunOptions): Promise<void> {
+  const versions = options.compare!.split(',').map(v => v.trim()) as Array<'stable' | 'insiders' | 'exploration'>;
+  
+  if (versions.length < 2) {
+    console.log(chalk.red('Comparison requires at least 2 versions (e.g., --compare stable,insiders)'));
+    process.exit(1);
+  }
+  
+  console.log('');
+  console.log(chalk.bold(`📊 Comparing scenario across ${versions.length} VS Code versions`));
+  console.log(chalk.dim('─'.repeat(60)));
+  
+  const results: { version: string; report: any; evaluation: any }[] = [];
+  
+  for (const version of versions) {
+    console.log('');
+    console.log(chalk.cyan(`▶ Running on VS Code ${version}...`));
+    
+    const config: RunConfig = {
+      scenarioId: scenario.id,
+      vscodeVersion: version,
+      resetSandbox: true,
+      captureArtifacts: true,
+      enableLLMGrading: options.llm !== false,
+      freshProfile: options.freshProfile || false,
+      recordVideo: options.video || false,
+      screenshotMethod: options.screenshotMethod || undefined,
+    };
+    
+    try {
+      const report = await runScenario(scenario, config, (event) => {
+        if (event.type === 'step:complete') {
+          const icon = event.data.status === 'passed' ? chalk.green('✓') : chalk.red('✗');
+          console.log(`  ${icon} ${event.data.stepId}`);
+        }
+      });
+      
+      let evaluation = null;
+      if (config.enableLLMGrading && report.status === 'passed') {
+        console.log(chalk.dim('  Evaluating with LLM...'));
+        evaluation = await evaluateScenarioRun(scenario, report);
+      }
+      
+      results.push({ version, report, evaluation });
+      console.log(chalk.green(`  ✓ Completed on ${version}`));
+    } catch (error) {
+      console.log(chalk.red(`  ✗ Failed on ${version}: ${error}`));
+      results.push({ version, report: { status: 'error', error: String(error) }, evaluation: null });
+    }
+  }
+  
+  // Print comparison table
+  console.log('');
+  console.log(chalk.dim('─'.repeat(60)));
+  console.log(chalk.bold('📊 Comparison Results'));
+  console.log(chalk.dim('─'.repeat(60)));
+  console.log('');
+  
+  console.log('| Metric | ' + versions.join(' | ') + ' |');
+  console.log('|--------|' + versions.map(() => '--------|').join(''));
+  
+  // Status row
+  const statuses = results.map(r => {
+    const status = r.report.status;
+    return status === 'passed' ? chalk.green('✓ Passed') : chalk.red(`✗ ${status}`);
+  });
+  console.log('| Status | ' + statuses.join(' | ') + ' |');
+  
+  // Duration row
+  const durations = results.map(r => r.report.duration ? `${(r.report.duration / 1000).toFixed(1)}s` : 'N/A');
+  console.log('| Duration | ' + durations.join(' | ') + ' |');
+  
+  // Score row (if LLM eval)
+  if (results.some(r => r.evaluation)) {
+    const scores = results.map(r => r.evaluation?.overallScore ? `${r.evaluation.overallScore}/5` : 'N/A');
+    console.log('| DX Score | ' + scores.join(' | ') + ' |');
+  }
+  
+  console.log('');
+  
+  // Highlight differences
+  if (results.length >= 2 && results.every(r => r.evaluation?.overallScore)) {
+    const scores = results.map(r => r.evaluation.overallScore);
+    const maxScore = Math.max(...scores);
+    const minScore = Math.min(...scores);
+    const diff = maxScore - minScore;
+    
+    if (diff > 0.5) {
+      const bestVersion = results.find(r => r.evaluation.overallScore === maxScore)?.version;
+      console.log(chalk.yellow(`⚠ Score difference of ${diff.toFixed(1)} between versions`));
+      console.log(chalk.green(`  Best experience: VS Code ${bestVersion}`));
+    } else {
+      console.log(chalk.green('✓ Similar experience across all versions'));
+    }
+  }
 }

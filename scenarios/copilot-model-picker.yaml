@@ -1,0 +1,94 @@
+id: copilot-model-picker
+name: "Switch Models in Copilot Chat"
+owner: "@isidorn"
+tags: [copilot, models, chat]
+priority: P1
+
+description: >
+  A user opens Copilot Chat and switches to a different AI model
+  to get a response. This covers the common workflow of selecting
+  a preferred model before asking a question.
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: stable
+  platform: macOS
+  copilotChannel: stable
+
+preconditions:
+  - "VS Code installed with GitHub Copilot extension"
+  - "User authenticated to GitHub Copilot"
+
+steps:
+  - id: open_chat
+    description: "Open Copilot Chat with keyboard shortcut"
+    action: openCopilotChat
+    hints:
+      - type: keyboard
+        keys: ["cmd+shift+i"]
+    timeout: 5000
+    observations:
+      - question: "Is the model picker visible immediately when chat opens?"
+        category: clarity
+      - question: "Can the user see which model is currently selected?"
+        category: clarity
+
+  - id: click_model_dropdown
+    description: "Open the model picker"
+    action: clickModelPicker
+    timeout: 3000
+    observations:
+      - question: "Are there descriptions explaining what each model is good at?"
+        category: clarity
+      - question: "Can the user understand speed vs quality tradeoffs between models?"
+        category: clarity
+      - question: "Are model limitations communicated (context window, vision, etc.)?"
+        category: clarity
+      - question: "Would a new user know which model to pick for their task?"
+        category: usability
+      - question: "Is there any indication of usage/cost differences between models?"
+        category: clarity
+
+  - id: select_model
+    description: "Choose a different model"
+    action: selectModel
+    timeout: 3000
+    observations:
+      - question: "Does the UI confirm which model was selected?"
+        category: clarity
+      - question: "How many clicks did it take to switch models?"
+        category: friction
+
+  - id: send_message
+    description: "Ask a simple question"
+    action: sendChatMessage
+    args:
+      message: "What's 2 + 2?"
+      waitForResponse: true
+    timeout: 15000
+    observations:
+      - question: "Does the response indicate which model answered?"
+        category: clarity
+      - question: "Is it clear the new model is being used, not the previous one?"
+        category: clarity
+
+terminologyChecks:
+  - uiElement: "Model picker dropdown"
+    expectedTerms: ["GPT-4o", "Claude", "model"]
+    docSource: "https://docs.github.com/copilot/using-github-copilot/ai-models"
+
+observations:
+  - id: overall_model_education
+    question: "Overall, does the UI help users understand which model to use and why?"
+    category: usability
+  - id: model_switching_workflow
+    question: "Is switching models a natural part of the workflow or does it feel bolted on?"
+    category: friction
+
+outputs:
+  captureVideo: true
+  screenshots:
+    - atStep: click_model_dropdown
+      name: "model-dropdown-open"
+    - atStep: send_message
+      name: "model-response"

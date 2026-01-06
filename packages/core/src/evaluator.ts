@@ -1,6 +1,8 @@
-import { Scenario, LLMEvaluation, EvaluationDimension, Suggestion, RunReport, RunArtifacts } from './types';
+import { Scenario, LLMEvaluation, EvaluationDimension, Suggestion, RunReport, RunArtifacts, ObservationResult, TerminologyResult } from './types';
 import { nanoid } from 'nanoid';
 import OpenAI from 'openai';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * LLM Evaluator using OpenAI GPT-5.2
@@ -192,10 +194,63 @@ function buildUserPrompt(
   runReport: Partial<RunReport>,
   artifacts: RunArtifacts
 ): string {
+  // Build step execution details with step-level observations
   const stepsExecuted = runReport.steps?.map((s, i) => {
     const step = scenario.steps.find(st => st.id === s.stepId);
-    return `${i + 1}. [${s.status.toUpperCase()}] ${step?.description || s.stepId}${s.error ? ` - Error: ${s.error}` : ''}`;
+    let stepLine = `${i + 1}. [${s.status.toUpperCase()}] ${step?.description || s.stepId}${s.error ? ` - Error: ${s.error}` : ''}`;
+    
+    // Add step-specific observations if present
+    if (step?.observations && step.observations.length > 0) {
+      const obsQuestions = step.observations.map(obs => 
+        `      - ${obs.question}${obs.category ? ` (${obs.category})` : ''}`
+      ).join('\n');
+      stepLine += `\n   📋 **Observe at this step**:\n${obsQuestions}`;
+    }
+    return stepLine;
   }).join('\n') || 'No step details available';
+
+  // Collect all step-level observations for the summary
+  const stepObservations = scenario.steps
+    .filter(step => step.observations && step.observations.length > 0)
+    .map(step => ({
+      stepId: step.id,
+      stepDescription: step.description,
+      observations: step.observations!
+    }));
+
+  // Format scenario-level observations if present
+  const scenarioObservationsSection = scenario.observations && scenario.observations.length > 0
+    ? `### Scenario-Level Observations
+
+${scenario.observations.map((obs, i) => `${i + 1}. **${obs.question}** ${obs.category ? `(${obs.category})` : ''}`).join('\n')}`
+    : '';
+
+  // Format step-level observations if present
+  const stepObservationsSection = stepObservations.length > 0
+    ? `### Step-Specific Observations
+
+${stepObservations.map(so => 
+  `**At step "${so.stepDescription}":**\n${so.observations.map(obs => 
+    `- ${obs.question}${obs.category ? ` (${obs.category})` : ''}`
+  ).join('\n')}`
+).join('\n\n')}`
+    : '';
+
+  const hasAnyObservations = scenario.observations?.length || stepObservations.length > 0;
+  const observationsSection = hasAnyObservations
+    ? `---
+
+## Observations to Address
+
+The scenario author wants you to specifically answer these questions about the user experience:
+
+${scenarioObservationsSection}
+
+${stepObservationsSection}
+
+Please include answers to these observations in your evaluation feedback.
+`
+    : '';
 
   const totalDuration = runReport.duration || 0;
   const stepCount = runReport.steps?.length || 0;
@@ -252,6 +307,7 @@ This shows the actual conversation between the user and Copilot during this scen
 ${artifacts.chatTranscript.slice(0, 4000)}
 \`\`\`` : ''}
 
+${observationsSection}
 ---
 
 ## Your Evaluation Task
@@ -318,12 +374,30 @@ Return your evaluation as a JSON object with this exact structure:
       "labels": ["area:<copilot|editor|chat|agent|inline|mcp>", "type:<bug|ux|feature|performance|accessibility>"],
       "severity": "<low|medium|high|critical - based on how much this hurts the experience>"
     }
+  ],
+  "observations": [
+    {
+      "observationId": "<id or generated>",
+      "stepId": "<step ID if step-specific, or null>",
+      "question": "<the observation question>",
+      "answer": "<your answer based on what you observed>",
+      "category": "<usability|performance|clarity|friction|terminology>"
+    }
+  ],
+  "terminologyIssues": [
+    {
+      "uiElement": "<what UI element>",
+      "expectedTerm": "<what docs say>",
+      "actualTerm": "<what UI shows>",
+      "suggestion": "<how to fix>"
+    }
   ]
 }
 \`\`\`
 
 **Important**:
 - Include ALL 6 dimensions in the dimensions array
+- Answer ALL observations from the scenario in the observations array
 - Generate 1-5 suggestions, prioritized by severity
 - Be specific—vague feedback like "could be faster" isn't actionable
 - If the scenario failed or had errors, factor that into your scores but also consider what the experience would be if it worked`;
@@ -371,24 +445,44 @@ export async function evaluateScenarioRun(
       ];
 
       // Add up to 5 screenshots as images
+      let screenshotCount = 0;
       for (const screenshot of artifacts.screenshots.slice(0, 5)) {
-        // Check if it's a base64 data URL or file path
-        if (screenshot.startsWith('data:')) {
+        try {
+          let imageUrl: string;
+          
+          // Check if it's a base64 data URL
+          if (screenshot.startsWith('data:')) {
+            imageUrl = screenshot;
+          } else if (screenshot.startsWith('http')) {
+            // HTTP URL - use directly
+            imageUrl = screenshot;
+          } else if (fs.existsSync(screenshot)) {
+            // File path - read and convert to base64
+            const imageBuffer = fs.readFileSync(screenshot);
+            const base64Image = imageBuffer.toString('base64');
+            const ext = path.extname(screenshot).toLowerCase();
+            const mimeType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+            imageUrl = `data:${mimeType};base64,${base64Image}`;
+            console.log(`  Loaded screenshot: ${path.basename(screenshot)} (${(imageBuffer.length / 1024).toFixed(0)}KB)`);
+          } else {
+            console.warn(`  Screenshot not found: ${screenshot}`);
+            continue;
+          }
+          
           content.push({
             type: 'image_url',
-            image_url: { url: screenshot, detail: 'high' },
+            image_url: { url: imageUrl, detail: 'high' },
           });
-        } else if (screenshot.startsWith('http')) {
-          content.push({
-            type: 'image_url',
-            image_url: { url: screenshot, detail: 'high' },
-          });
+          screenshotCount++;
+        } catch (err) {
+          console.warn(`  Failed to load screenshot ${screenshot}:`, err);
         }
-        // Skip file paths - would need to read and convert to base64
       }
-
+      
+      console.log(`  Sending ${screenshotCount} screenshots to LLM for visual analysis`);
       messages.push({ role: 'user', content });
     } else {
+      console.log('  No screenshots available for visual analysis');
       messages.push({ role: 'user', content: buildUserPrompt(scenario, runReport, artifacts) });
     }
 
@@ -397,7 +491,7 @@ export async function evaluateScenarioRun(
       messages,
       response_format: { type: 'json_object' },
       temperature: 0.3,
-      max_completion_tokens: 2000,
+      max_completion_tokens: 4000,
     });
 
     const rawResponse = response.choices[0]?.message?.content || '';
@@ -477,10 +571,31 @@ function normalizeEvaluation(parsed: any, rawResponse: string): LLMEvaluation {
     severity: ['low', 'medium', 'high', 'critical'].includes(s.severity) ? s.severity : 'medium',
   }));
 
+  // Normalize observations
+  const observations: ObservationResult[] = (parsed.observations || []).map((o: any) => ({
+    observationId: o.observationId || nanoid(),
+    stepId: o.stepId || undefined,
+    question: o.question || '',
+    answer: o.answer || 'No answer provided',
+    category: o.category || undefined,
+  }));
+
+  // Normalize terminology results
+  const terminologyResults: TerminologyResult[] = (parsed.terminologyIssues || []).map((t: any) => ({
+    checkId: nanoid(),
+    uiElement: t.uiElement || '',
+    expectedTerms: [t.expectedTerm].filter(Boolean),
+    actualText: t.actualTerm || '',
+    matches: false,
+    missingTerms: [t.expectedTerm].filter(Boolean),
+  }));
+
   return {
     overallScore: Math.round(overallScore * 10) / 10,
     dimensions,
     suggestions,
+    observations: observations.length > 0 ? observations : undefined,
+    terminologyResults: terminologyResults.length > 0 ? terminologyResults : undefined,
     rawResponse,
   };
 }

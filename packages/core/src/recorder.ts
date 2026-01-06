@@ -1,5 +1,5 @@
 import { _electron as electron, ElectronApplication, Page } from 'playwright';
-import { Scenario, Step, Priority, ScreenshotConfig } from './types';
+import { Scenario, Step, Priority, ScreenshotConfig, ScreenshotMethod } from './types';
 import { scenarioToYAML } from './parser';
 import { nanoid } from 'nanoid';
 import * as path from 'path';
@@ -84,6 +84,8 @@ export interface RecorderConfig {
   autoDescribe?: boolean;
   /** Capture screenshots during recording */
   captureScreenshots?: boolean;
+  /** Preferred screenshot capture method ('electron' | 'os' | 'playwright') */
+  screenshotMethod?: ScreenshotMethod;
 }
 
 export interface RecorderContext {
@@ -104,6 +106,69 @@ export interface RecorderContext {
   crashed: boolean;
   /** Partial scenario saved on crash */
   partialSavePath?: string;
+}
+
+/**
+ * Take a screenshot of the Electron window using native capture
+ * This ensures we get the full window content, not just the viewport
+ */
+async function takeNativeScreenshot(
+  app: ElectronApplication,
+  page: Page,
+  screenshotPath: string,
+  preferredMethod: ScreenshotMethod = 'electron'
+): Promise<void> {
+  // Determine try order based on preference
+  const orders: Record<ScreenshotMethod, Array<'electron' | 'os' | 'playwright'>> = {
+    electron: ['electron', 'os', 'playwright'],
+    os: ['os', 'electron', 'playwright'],
+    playwright: ['playwright', 'electron', 'os'],
+  };
+
+  const tryOrder = orders[preferredMethod] || orders.electron;
+
+  for (const method of tryOrder) {
+    try {
+      if (method === 'electron') {
+        // Get the BrowserWindow and use Electron's native capture
+        const browserWindow = await app.browserWindow(page);
+        const nativeImage = await browserWindow.evaluate(async (win: any) => {
+          const image = await win.webContents.capturePage();
+          return image.toPNG().toString('base64');
+        });
+        const buffer = Buffer.from(nativeImage, 'base64');
+        fs.writeFileSync(screenshotPath, buffer);
+        return;
+      }
+
+      if (method === 'os') {
+        const sdMod = await import('screenshot-desktop');
+        const sd = (sdMod && (sdMod as any).default) ? (sdMod as any).default : sdMod;
+        const img = await sd({ format: 'png' }) as Buffer | string;
+        if (Buffer.isBuffer(img)) {
+          fs.writeFileSync(screenshotPath, img);
+          return;
+        }
+        if (typeof img === 'string') {
+          try {
+            fs.writeFileSync(screenshotPath, Buffer.from(img, 'base64'));
+            return;
+          } catch {}
+        }
+      }
+
+      if (method === 'playwright') {
+        await page.screenshot({ path: screenshotPath });
+        return;
+      }
+    } catch (e) {
+      // Try next method in order
+      continue;
+    }
+  }
+
+  // If all attempted methods failed, throw
+  throw new RecorderError('Failed to capture screenshot via any method', 'RECORDING_INTERRUPTED', true);
 }
 
 export type RecorderEventType =
@@ -748,10 +813,31 @@ export async function startRecording(
     args,
     timeout: 60000,
   });
-  
+
   const page = await app.firstWindow();
   page.setDefaultTimeout(30000);
   
+  // Maximize the window to capture full VS Code UI
+  try {
+    const browserWindow = await app.browserWindow(page);
+    await browserWindow.evaluate((win: any) => {
+      win.maximize();
+    });
+    // Wait for window to finish maximizing
+    await page.waitForTimeout(500);
+    emit({
+      type: 'recorder:log',
+      timestamp: new Date().toISOString(),
+      data: { message: 'Window maximized for full screenshot capture' },
+    });
+  } catch (err) {
+    emit({
+      type: 'recorder:log',
+      timestamp: new Date().toISOString(),
+      data: { message: 'Could not maximize window, using default size' },
+    });
+  }
+
   // Wait for VS Code to be ready
   emit({
     type: 'recorder:log',
@@ -829,7 +915,9 @@ export async function takeRecordingScreenshot(
     `${String(ctx.screenshotCounter).padStart(3, '0')}_${filename}.png`
   );
   
-  await ctx.page.screenshot({ path: screenshotPath, fullPage: true });
+  // Use configured screenshot method (defaults to Electron native capture)
+  const method = (ctx.config && (ctx.config as any).screenshotMethod) as ScreenshotMethod | undefined;
+  await takeNativeScreenshot(ctx.app, ctx.page, screenshotPath, method ?? 'electron');
   
   if (emit) {
     emit({
@@ -935,14 +1023,6 @@ export async function stopRecording(
       'User authenticated to GitHub Copilot',
     ],
     steps,
-    assertions: [
-      {
-        id: 'llm_quality_check',
-        type: 'llmGrade',
-        expected: '>=80',
-        required: false,
-      },
-    ],
     outputs: {
       captureVideo: true,
       screenshots: screenshotConfigs.length > 0 ? screenshotConfigs : undefined,
