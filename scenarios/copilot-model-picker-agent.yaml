@@ -1,0 +1,124 @@
+# Agent-Driven Scenario: Change Copilot Model
+# This scenario is designed to be run by the @scenario-runner agent in Copilot Chat
+# Instead of scripted steps, it defines goals that the agent figures out how to achieve
+
+id: copilot-model-picker-agent
+name: "Change Copilot Language Model (Agent-Driven)"
+description: >
+  Tests the model picker in GitHub Copilot Chat. The agent will figure out
+  how to open the chat, locate the model picker, and change to a different model.
+  This validates that users can discover and use the model selection feature.
+
+priority: P0
+owner: "@copilot-team"
+tags: [copilot, model-picker, agent-driven, discovery]
+
+# Agent-driven mode - no scripted steps needed
+driver: agent
+
+# High-level goals for the agent to achieve
+goals:
+  - id: open_copilot_chat
+    intent: "Open the GitHub Copilot Chat panel"
+    success_criteria: "Chat panel is visible and ready for input"
+    hints:
+      - "Use keyboard shortcut Cmd+Shift+I (Mac) or Ctrl+Shift+I (Windows)"
+      - "Or look for Copilot icon in the activity bar"
+    timeout: 10000
+
+  - id: find_model_picker
+    intent: "Locate the model/language model picker in the chat interface"
+    success_criteria: "Can see a dropdown or button that shows the current model name"
+    hints:
+      - "Look in the chat input toolbar area"
+      - "The current model name (like 'GPT-4o' or 'Claude') might be displayed"
+      - "It might be a dropdown button with an arrow"
+    timeout: 10000
+
+  - id: open_model_picker
+    intent: "Open the model selection dropdown"
+    success_criteria: "A list of available models is displayed"
+    hints:
+      - "Click on the model picker button"
+      - "Should see options like GPT-4o, Claude, o1, etc."
+    timeout: 5000
+
+  - id: select_different_model
+    intent: "Select a different model than the currently selected one"
+    success_criteria: "A new model is selected and the picker closes"
+    hints:
+      - "Pick any model that isn't currently selected"
+      - "The UI should update to show the new selection"
+    timeout: 5000
+
+  - id: verify_model_change
+    intent: "Verify the model was actually changed"
+    success_criteria: "The model picker now shows the newly selected model"
+    hints:
+      - "The button/display should show the new model name"
+      - "Try sending a test message to confirm"
+    timeout: 5000
+
+# Questions for the agent to answer about the UX
+observations:
+  - id: obs_discoverability
+    question: "How easy was it to find the model picker? Was it obvious where to look?"
+    category: usability
+
+  - id: obs_model_list
+    question: "Were all model options clearly labeled? Could you tell what each model is good for?"
+    category: clarity
+
+  - id: obs_feedback
+    question: "Did the UI provide clear feedback when the model was changed?"
+    category: clarity
+
+  - id: obs_performance
+    question: "Did the model picker respond quickly? Any lag when opening or selecting?"
+    category: performance
+
+  - id: obs_current_model
+    question: "Was it clear which model was currently selected before making a change?"
+    category: usability
+
+  - id: obs_persistence
+    question: "Does the model selection appear to persist (would it be remembered next time)?"
+    category: usability
+
+# Validation checkpoints (agent verifies these)
+checkpoints:
+  - id: chat_opened
+    type: elementVisible
+    description: "Copilot Chat panel is visible"
+    
+  - id: picker_accessible
+    type: elementVisible
+    description: "Model picker is accessible in the UI"
+    
+  - id: model_changed
+    type: custom
+    description: "Selected model is different from initial model"
+
+# Environment requirements
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: insiders
+  platform: macOS
+  copilotChannel: prerelease
+
+preconditions:
+  - "VS Code Insiders installed"
+  - "GitHub Copilot extension installed and authenticated"
+  - "Multiple models available in the account"
+
+# Output configuration
+outputs:
+  captureVideo: false
+  screenshots:
+    - atStep: find_model_picker
+      name: "model-picker-location"
+    - atStep: open_model_picker
+      name: "model-options"
+    - atStep: verify_model_change
+      name: "model-changed"
+  storeLogs: true

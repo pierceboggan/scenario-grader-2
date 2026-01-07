@@ -1,0 +1,11 @@
+{
+	"servers": {
+		"vscode-playwright-mcp": {
+			"type": "stdio",
+			"command": "node",
+			"args": ["./out/stdio.js"],
+			"cwd": "/Users/pierceboggan/Documents/GitHub/vscode/test/mcp"
+		}
+	},
+	"inputs": []
+}

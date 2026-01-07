@@ -297,6 +297,47 @@ The LLM evaluator grades scenarios on 6 dimensions:
 
 Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
+## 🤖 VS Code Custom Agents (NEW!)
+
+You can now run scenarios directly in VS Code using Copilot Chat with custom agents. No CLI needed!
+
+### Quick Start
+
+1. Open VS Code in this workspace
+2. Open Copilot Chat (`Cmd+Shift+I` / `Ctrl+Shift+I`)
+3. Type `@scenario-runner Run the copilot-chat-basic scenario`
+
+### Available Agents
+
+| Agent | Description | Usage |
+|-------|-------------|-------|
+| `@scenario-runner` | Run scenario tests | `@scenario-runner Run copilot-model-picker` |
+| `@report-generator` | Generate test reports | Handoff from scenario-runner |
+| `@scenario-background` | Long-running scenarios | `@scenario-background Run background-agent-session` |
+
+### Benefits Over CLI
+
+- **Zero setup**: Works in any VS Code with Copilot
+- **Self-healing**: Agent adapts to UI changes
+- **No LLM costs**: Uses your Copilot subscription
+- **Interactive**: Ask follow-up questions during runs
+
+### Example Workflows
+
+```
+# Run a single scenario
+@scenario-runner Run the copilot-inline-chat scenario
+
+# Run all P0 scenarios
+@scenario-runner Run all P0 priority scenarios
+
+# Run and generate report
+@scenario-runner Run copilot-agent-mode
+→ Click [Generate Report] handoff button
+```
+
+See [docs/MCP_INTEGRATION_PLAN.md](docs/MCP_INTEGRATION_PLAN.md) for full documentation.
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.
