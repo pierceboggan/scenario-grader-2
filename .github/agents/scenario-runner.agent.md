@@ -2,28 +2,11 @@
 name: Scenario Runner
 description: Run scenario tests to validate VS Code and Copilot features
 tools:
-  - codebase
-  - editFiles
-  - extensions
-  - fetch
-  - findTestFiles
-  - githubRepo
-  - problems
-  - runCommands
-  - runInTerminal
-  - runNotebooks
-  - runTests
-  - search
-  - terminalLastCommand
-  - terminalSelection
-  - testFailure
-  - thinking
-  - usages
-  - visionScreenshot
-model: claude-sonnet-4
+  ['vscode/extensions', 'execute/runNotebookCell', 'execute/testFailure', 'execute/getTerminalOutput', 'execute/runInTerminal', 'execute/runTests', 'read/getNotebookSummary', 'read/problems', 'read/readFile', 'read/readNotebookCellOutput', 'read/terminalSelection', 'read/terminalLastCommand', 'edit/editFiles', 'search', 'web', 'vscode-playwright-mcp/*']
+model: Claude Opus 4.5 (copilot)
 handoffs:
   - label: Generate Report
-    agent: report-generator
+    agent: Report Generator
     prompt: Generate a detailed report from the scenario run above.
     send: false
 ---
@@ -63,18 +46,7 @@ Scenarios are defined in YAML files in the `scenarios/` folder. Each scenario ha
 
 For each step, use your judgment to achieve the intent. Don't follow steps literally - interpret them as goals.
 
-| Step Action | Your Approach |
-|-------------|---------------|
-| `openCopilotChat` | Use keyboard shortcut Cmd+Shift+I (Mac) or Ctrl+Shift+I (Windows/Linux) |
-| `sendChatMessage` | Type in the chat input and press Enter |
-| `clickModelPicker` | Find and click the model dropdown in the chat toolbar |
-| `selectModel` | Choose a model from the dropdown list |
-| `openCommandPalette` | Use Cmd+Shift+P (Mac) or Ctrl+Shift+P (Windows/Linux) |
-| `typeText` | Type the specified text |
-| `wait` | Pause for the specified duration |
-| `openInlineChat` | Use Cmd+I (Mac) or Ctrl+I (Windows/Linux) in the editor |
-| `openExtensionsPanel` | Use Cmd+Shift+X (Mac) or Ctrl+Shift+X (Windows/Linux) |
-| `createFile` | Use Cmd+N (Mac) or Ctrl+N (Windows/Linux) |
+ALWAYS use the vscode-playwright-mcp to drive automation, take screenshots, and drive future actions.
 
 ## Execution Workflow
 
