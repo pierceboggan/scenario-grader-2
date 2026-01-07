@@ -1,0 +1,141 @@
+id: copilot-feature-discovery
+name: Copilot Feature Discovery Tracking
+description: Track which Copilot features users naturally discover during a coding task
+priority: P1
+version: "1.0"
+tags:
+  - copilot
+  - feature-discovery
+  - ux-research
+owner: product-team
+
+environment:
+  vscodeVersion: stable
+
+# Feature Discovery Configuration
+featureDiscovery:
+  enabled: true
+  trackAllInteractions: true
+  captureScreenshots: true
+  features:
+    - id: copilot-chat
+      name: Copilot Chat Panel
+      description: Open the main Copilot Chat interface
+      category: core
+      critical: true
+      entryPoints:
+        - type: keyboard
+          identifier: "Cmd+Shift+I"
+          label: Keyboard shortcut (Mac)
+        - type: keyboard
+          identifier: "Ctrl+Shift+I"
+          label: Keyboard shortcut (Windows)
+        - type: button
+          identifier: chat-button
+          selector: "[aria-label*='Chat']"
+          label: Activity bar icon
+        - type: command-palette
+          identifier: "GitHub Copilot: Open Chat"
+          label: Command palette
+      preferredEntryPoint: "Cmd+Shift+I"
+      
+    - id: inline-chat
+      name: Inline Chat
+      description: Open inline chat within the editor
+      category: core
+      critical: true
+      entryPoints:
+        - type: keyboard
+          identifier: "Cmd+I"
+          label: Keyboard shortcut (Mac)
+        - type: keyboard
+          identifier: "Ctrl+I"
+          label: Keyboard shortcut (Windows)
+        - type: context-menu
+          identifier: "Copilot > Start Inline Chat"
+          label: Right-click menu
+      preferredEntryPoint: "Cmd+I"
+      
+    - id: agent-mode
+      name: Agent Mode Toggle
+      description: Switch between Ask and Agent mode
+      category: advanced
+      critical: false
+      entryPoints:
+        - type: button
+          identifier: mode-toggle
+          selector: "[aria-label*='mode']"
+          label: Mode dropdown in chat
+          
+    - id: next-edit-suggestions
+      name: Next Edit Suggestions
+      description: AI-suggested next edit locations
+      category: advanced
+      critical: false
+      entryPoints:
+        - type: keyboard
+          identifier: "Tab"
+          label: Accept suggestion
+        - type: button
+          identifier: gutter-decoration
+          selector: ".next-edit-decoration"
+          label: Gutter icon
+
+preconditions:
+  - VS Code is running with Copilot extensions
+  - A code file is open in the editor
+  - User is signed in to GitHub
+
+steps:
+  - id: open_file
+    description: Open a TypeScript file to work with
+    action: openFile
+    optional: false
+    args:
+      path: "src/index.ts"
+
+  - id: natural_exploration
+    description: Allow user to naturally explore Copilot features (2 minute window)
+    action: wait
+    optional: false
+    args:
+      duration: 120000
+      allowInteraction: true
+    observation:
+      question: "Which features does the user discover naturally?"
+      category: usability
+
+  - id: coding_task
+    description: User completes a coding task using Copilot
+    action: userTask
+    optional: false
+    args:
+      instruction: "Add error handling to this function"
+      timeout: 180000
+
+  - id: capture_results
+    description: Capture feature discovery results
+    action: captureFeatureDiscovery
+    optional: false
+
+checkpoints:
+  - id: features_used
+    type: custom
+    verify: "At least one Copilot feature was discovered"
+
+observations:
+  - id: discovery_path
+    question: "What was the user's discovery path for each feature?"
+    category: usability
+    
+  - id: missed_opportunities
+    question: "Which critical features were not discovered?"
+    category: friction
+    
+  - id: entry_point_preference
+    question: "Did users find the preferred (fastest) entry points?"
+    category: usability
+    
+  - id: confusion_points
+    question: "Were there any moments of confusion about how to access features?"
+    category: clarity

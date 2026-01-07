@@ -1,0 +1,129 @@
+id: copilot-error-recovery
+name: Copilot Error Recovery Testing
+description: Test how Copilot handles various error conditions gracefully
+priority: P0
+version: "1.0"
+tags:
+  - copilot
+  - error-handling
+  - resilience
+owner: reliability-team
+
+environment:
+  vscode: stable
+  extensions:
+    - GitHub.copilot
+    - GitHub.copilot-chat
+
+# Error recovery testing configuration
+errorRecovery:
+  enabled: true
+  isolateScenarios: true  # Reset between each error test
+  scenarios:
+    # Test: Network timeout during chat
+    - id: network_timeout_chat
+      inject: networkTimeout
+      duringStep: send_message
+      expectRecovery:
+        - errorMessageShown
+        - retryBehavior
+        - statePreserved
+      recoveryTimeout: 30000
+      description: "Verify chat handles network timeout gracefully"
+      
+    # Test: API rate limit
+    - id: rate_limit_response
+      inject: apiRateLimit
+      duringStep: send_message
+      expectRecovery:
+        - errorMessageShown
+        - userPrompted
+        - gracefulDegradation
+      recoveryTimeout: 15000
+      description: "Verify rate limit shows appropriate message"
+      
+    # Test: Auth expiration mid-session
+    - id: auth_expired
+      inject: authExpired
+      duringStep: verify_response
+      expectRecovery:
+        - userPrompted
+        - statePreserved
+      recoveryTimeout: 20000
+      description: "Verify auth expiration prompts re-login"
+      
+    # Test: API server error
+    - id: server_error
+      inject: apiError
+      duringStep: send_message
+      expectRecovery:
+        - errorMessageShown
+        - retryBehavior
+      recoveryTimeout: 15000
+      description: "Verify server errors are handled gracefully"
+
+preconditions:
+  - VS Code is running with Copilot signed in
+  - Network connectivity is available (will be simulated as failing)
+
+steps:
+  - id: open_chat
+    description: Open Copilot Chat panel
+    action: openCopilotChat
+    optional: false
+    hints:
+      - type: keyboard
+        value: "Cmd+Shift+I"
+
+  - id: send_message
+    description: Send a chat message (error will be injected here)
+    action: sendChatMessage
+    optional: false
+    args:
+      message: "Write a function to calculate fibonacci numbers"
+      waitForResponse: true
+    hints:
+      - type: type
+        value: "Write a function"
+
+  - id: verify_response
+    description: Verify response handling (even during errors)
+    action: waitForElement
+    optional: true  # May not complete if error prevents response
+    args:
+      selector: ".chat-response, .error-message, .retry-button"
+      timeout: 15000
+
+  - id: attempt_recovery
+    description: Attempt recovery action if error occurred
+    action: clickIfPresent
+    optional: true
+    args:
+      selector: ".retry-button, .sign-in-button"
+    hints:
+      - type: click
+        target: ".retry-button"
+
+checkpoints:
+  - id: error_shown
+    type: elementVisible
+    afterStep: send_message
+    verify: "Error message or retry option is visible"
+    
+  - id: ui_responsive
+    type: elementVisible
+    afterStep: attempt_recovery
+    verify: "UI remains responsive and functional"
+
+observations:
+  - id: error_message_quality
+    question: "Was the error message helpful and actionable?"
+    category: usability
+    
+  - id: recovery_success
+    question: "Did the recovery action restore functionality?"
+    category: performance
+    
+  - id: state_preservation
+    question: "Was user's chat history and context preserved?"
+    category: usability

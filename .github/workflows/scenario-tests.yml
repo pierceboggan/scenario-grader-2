@@ -1,0 +1,231 @@
+name: Scenario Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Specific scenario to run (leave empty for all)'
+        required: false
+        default: ''
+      tags:
+        description: 'Filter scenarios by tag'
+        required: false
+        default: ''
+      priority:
+        description: 'Filter by priority (P0, P1, P2)'
+        required: false
+        default: ''
+
+env:
+  DISPLAY: ':99'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      scenarios: ${{ steps.list-scenarios.outputs.scenarios }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build packages
+        run: npm run build
+      
+      - name: List scenarios to run
+        id: list-scenarios
+        run: |
+          if [ -n "${{ github.event.inputs.scenario }}" ]; then
+            echo "scenarios=[\"${{ github.event.inputs.scenario }}\"]" >> $GITHUB_OUTPUT
+          else
+            SCENARIOS=$(node packages/cli/dist/index.js list --json 2>/dev/null | jq -c '[.[].id]')
+            echo "scenarios=$SCENARIOS" >> $GITHUB_OUTPUT
+          fi
+
+  run-scenarios:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJson(needs.setup.outputs.scenarios) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build packages
+        run: npm run build
+      
+      # Install VS Code dependencies for Linux
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2 \
+            libatk-bridge2.0-0 \
+            libatk1.0-0 \
+            libcups2 \
+            libdbus-1-3 \
+            libdrm2 \
+            libgbm1 \
+            libgtk-3-0 \
+            libnspr4 \
+            libnss3 \
+            libpango-1.0-0 \
+            libx11-6 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxext6 \
+            libxfixes3 \
+            libxkbcommon0 \
+            libxrandr2 \
+            xvfb \
+            x11-xserver-utils \
+            libxss1 \
+            libxtst6 \
+            libsecret-1-0 \
+            gnome-keyring \
+            dbus-x11
+      
+      # Download and install VS Code
+      - name: Install VS Code
+        run: |
+          wget -q https://update.code.visualstudio.com/latest/linux-deb-x64/stable -O /tmp/vscode.deb
+          sudo dpkg -i /tmp/vscode.deb || sudo apt-get install -f -y
+          
+          # Also install Insiders for comparison testing
+          wget -q https://update.code.visualstudio.com/latest/linux-deb-x64/insider -O /tmp/vscode-insiders.deb
+          sudo dpkg -i /tmp/vscode-insiders.deb || sudo apt-get install -f -y
+      
+      # Install Playwright browsers
+      - name: Install Playwright
+        run: npx playwright install chromium
+      
+      # Setup virtual display
+      - name: Start Xvfb
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 3
+      
+      # Setup GitHub auth if available
+      - name: Setup authentication
+        if: env.SCENARIO_GITHUB_TOKEN != ''
+        env:
+          SCENARIO_GITHUB_TOKEN: ${{ secrets.SCENARIO_GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.scenario-runner
+          echo '{"accessToken":"${{ secrets.SCENARIO_GITHUB_TOKEN }}","tokenType":"bearer","scope":"read:user user:email","authenticatedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}' > ~/.scenario-runner/auth.json
+          chmod 600 ~/.scenario-runner/auth.json
+      
+      # Run the scenario
+      - name: Run scenario ${{ matrix.scenario }}
+        id: run-scenario
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SCENARIO_GITHUB_TOKEN: ${{ secrets.SCENARIO_GITHUB_TOKEN }}
+        run: |
+          # Start dbus for keyring
+          eval $(dbus-launch --sh-syntax)
+          
+          # Run the scenario with fresh profile for clean state
+          node packages/cli/dist/index.js run "${{ matrix.scenario }}" \
+            --fresh-profile \
+            --video \
+            --screenshot-method playwright \
+            --output ./reports/${{ matrix.scenario }} \
+            2>&1 | tee ./reports/${{ matrix.scenario }}/run.log
+          
+          echo "status=$?" >> $GITHUB_OUTPUT
+      
+      # Upload artifacts
+      - name: Upload scenario artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scenario-${{ matrix.scenario }}
+          path: |
+            ~/.scenario-runner/artifacts/*/
+            ./reports/${{ matrix.scenario }}/
+          retention-days: 30
+      
+      # Check result
+      - name: Check scenario result
+        if: steps.run-scenario.outcome == 'failure'
+        run: |
+          echo "::error::Scenario ${{ matrix.scenario }} failed"
+          exit 1
+
+  # Generate summary report
+  summary:
+    needs: run-scenarios
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all-artifacts
+      
+      - name: Generate summary report
+        run: |
+          echo "# Scenario Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scenario | Status | Duration | Score |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          
+          for dir in ./all-artifacts/scenario-*/; do
+            if [ -d "$dir" ]; then
+              scenario=$(basename "$dir" | sed 's/scenario-//')
+              
+              # Try to extract info from report
+              if [ -f "$dir/REPORT.md" ]; then
+                status=$(grep -oP 'Status: \K\w+' "$dir/REPORT.md" 2>/dev/null || echo "Unknown")
+                duration=$(grep -oP 'Duration \| \K[^|]+' "$dir/REPORT.md" 2>/dev/null || echo "N/A")
+                score=$(grep -oP 'DX Score.+\| \*\*\K[^*]+' "$dir/REPORT.md" 2>/dev/null || echo "N/A")
+              else
+                status="No Report"
+                duration="N/A"
+                score="N/A"
+              fi
+              
+              status_emoji="❓"
+              if [ "$status" = "PASSED" ]; then status_emoji="✅"; fi
+              if [ "$status" = "FAILED" ]; then status_emoji="❌"; fi
+              
+              echo "| $scenario | $status_emoji $status | $duration | $score |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View artifacts for screenshots and detailed reports." >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload combined report
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-report
+          path: ./all-artifacts/
+          retention-days: 30

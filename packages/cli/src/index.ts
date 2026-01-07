@@ -9,6 +9,7 @@ import { validateCommand } from './commands/validate.js';
 import { createCommand } from './commands/create.js';
 import { showCommand } from './commands/show.js';
 import { recordCommand } from './commands/record.js';
+import { authCommand } from './commands/auth.js';
 import { specCommand, authorCommand, gapCommand, workflowCommand } from './commands/handoff.js';
 
 // Load environment variables from .env file
@@ -51,6 +52,7 @@ program
   .option('-o, --output <path>', 'Output directory for reports')
   .option('--compare <versions>', 'Compare across VS Code versions (e.g., stable,insiders)')
   .option('--validate', 'Only validate scenario without running')
+  .option('--orchestrated', 'Force orchestrated mode for long-running scenarios')
   .action(runCommand);
 
 // List command
@@ -102,6 +104,15 @@ program
   .option('--yaml', 'Output as YAML')
   .option('--json', 'Output as JSON')
   .action(showCommand);
+
+// Auth command
+program
+  .command('auth')
+  .description('Authenticate with GitHub for Copilot scenarios')
+  .option('--logout', 'Clear stored authentication')
+  .option('--status', 'Show authentication status')
+  .option('--verify', 'Verify stored token is still valid')
+  .action(authCommand);
 
 // ============================================================================
 // PM Workflow Commands

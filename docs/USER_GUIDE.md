@@ -5,6 +5,9 @@ A CLI tool for automated end-to-end testing of VS Code features using Playwright
 ## Quick Start
 
 ```bash
+# Authenticate with GitHub (required for Copilot scenarios)
+node packages/cli/dist/index.js auth
+
 # List available scenarios
 node packages/cli/dist/index.js list
 
@@ -17,6 +20,55 @@ node packages/cli/dist/index.js run --all
 # Show scenario details
 node packages/cli/dist/index.js show copilot-chat-basic
 ```
+
+## Authentication
+
+Before running scenarios that require GitHub Copilot or GitHub features, you need to authenticate:
+
+```bash
+# Start the authentication flow
+node packages/cli/dist/index.js auth
+```
+
+This uses GitHub's **Device Code Flow** - a secure method that:
+- Never asks for your password directly
+- Avoids CAPTCHA and 2FA interruptions during testing
+- Works well with automation
+
+### How It Works
+
+1. Run `auth` command
+2. A code is displayed (e.g., `ABCD-1234`)
+3. Your browser opens to GitHub's device activation page
+4. Enter the code and authorize the app
+5. Your credentials are securely stored locally
+
+### Auth Commands
+
+```bash
+# Start authentication flow
+node packages/cli/dist/index.js auth
+
+# Check authentication status
+node packages/cli/dist/index.js auth --status
+
+# Verify token is still valid
+node packages/cli/dist/index.js auth --verify
+
+# Logout (clear stored credentials)
+node packages/cli/dist/index.js auth --logout
+```
+
+### Using Authentication with Fresh Profiles
+
+When running scenarios with `--fresh-profile`, the stored authentication is automatically used:
+
+```bash
+# Run with fresh profile - uses your stored GitHub auth
+node packages/cli/dist/index.js run copilot-chat-basic --fresh-profile
+```
+
+**Credentials are stored in:** `~/.scenario-runner/auth.json` (readable only by you)
 
 ## Commands
 
@@ -48,11 +100,12 @@ node packages/cli/dist/index.js run --tag copilot
 |--------|-------------|
 | `--all` | Run all available scenarios |
 | `--tag <tag>` | Run scenarios matching a tag |
-| `--reuse-profile` | Use your existing VS Code config (requires closing VS Code first) |
+| `--fresh-profile` | Use a fresh VS Code profile (isolated, uses stored auth) |
 | `--video` | Record video of the scenario run (saved as .webm) |
 | `--no-llm` | Disable LLM evaluation |
 | `--no-artifacts` | Don't capture screenshots |
 | `-v, --vscode-version` | Use `stable` or `insiders` |
+| `--screenshot-method` | Screenshot method: `electron` (default), `os`, or `playwright` |
 
 ### `show` - View Scenario Details
 

@@ -14,6 +14,7 @@ import { ScreenshotMethod } from './types';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { loadAuth, setupVSCodeAuth, hasValidAuth } from './auth';
 
 /**
  * VS Code Scenario Runner using Playwright
@@ -285,6 +286,10 @@ export interface LaunchOptions {
   recordVideo?: boolean;
   /** GitHub auth config for fresh profile scenarios */
   auth?: AuthConfig;
+  /** Preferred screenshot method */
+  screenshotMethod?: ScreenshotMethod;
+  /** Use stored device-code authentication */
+  useStoredAuth?: boolean;
 }
 
 /**
@@ -297,7 +302,7 @@ async function launchVSCode(
   options: LaunchOptions = {}
 ): Promise<VSCodeContext> {
   // Default to using existing profile (already authenticated)
-  const { freshProfile = false, recordVideo = false, auth, screenshotMethod } = options;
+  const { freshProfile = false, recordVideo = false, auth, screenshotMethod, useStoredAuth = true } = options;
   
   const artifactsPath = path.join(ARTIFACTS_DIR, runId);
   fs.mkdirSync(artifactsPath, { recursive: true });
@@ -331,9 +336,11 @@ async function launchVSCode(
     '--disable-updates',
   ];
   
+  let userDataDir: string | undefined;
+  
   // Use fresh profile with isolated directories, or use existing VS Code config
   if (freshProfile) {
-    const userDataDir = path.join(artifactsPath, 'user-data');
+    userDataDir = path.join(artifactsPath, 'user-data');
     const extensionsDir = path.join(artifactsPath, 'extensions');
     args.push(`--user-data-dir=${userDataDir}`);
     args.push(`--extensions-dir=${extensionsDir}`);
@@ -342,6 +349,39 @@ async function launchVSCode(
       timestamp: new Date().toISOString(),
       data: { message: 'Using fresh profile (isolated user-data and extensions)' },
     });
+    
+    // Setup authentication in fresh profile if we have stored auth
+    if (useStoredAuth && hasValidAuth()) {
+      const storedAuth = loadAuth();
+      if (storedAuth) {
+        emit({
+          type: 'log',
+          timestamp: new Date().toISOString(),
+          data: { message: `Setting up authentication for: ${storedAuth.username || storedAuth.email || 'GitHub user'}` },
+        });
+        
+        const authSetup = await setupVSCodeAuth(userDataDir);
+        if (authSetup) {
+          emit({
+            type: 'log',
+            timestamp: new Date().toISOString(),
+            data: { message: '✓ Pre-configured GitHub authentication in fresh profile' },
+          });
+        } else {
+          emit({
+            type: 'log',
+            timestamp: new Date().toISOString(),
+            data: { message: '⚠️ Could not setup auth - may need to authenticate manually' },
+          });
+        }
+      }
+    } else if (freshProfile) {
+      emit({
+        type: 'log',
+        timestamp: new Date().toISOString(),
+        data: { message: '⚠️ No stored auth found. Run "scenario-grader auth" to authenticate.' },
+      });
+    }
   } else {
     emit({
       type: 'log',

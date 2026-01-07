@@ -26,6 +26,21 @@ export const EnvironmentSchema = z.object({
   platform: PlatformSchema.default('macOS'),
   workspacePath: z.string().optional(),
   copilotChannel: CopilotChannelSchema.default('stable'),
+  // Repository-based workspace configuration
+  repository: z.object({
+    /** Git repository URL (HTTPS or SSH) */
+    url: z.string(),
+    /** Branch, tag, or commit to checkout */
+    ref: z.string().optional(),
+    /** Subdirectory to open as workspace (relative to repo root) */
+    subdir: z.string().optional(),
+    /** Commands to run after cloning (e.g., npm install) */
+    setupCommands: z.array(z.string()).optional(),
+    /** Use sparse checkout for large repos */
+    sparse: z.boolean().optional(),
+    /** Paths to include in sparse checkout */
+    sparsePaths: z.array(z.string()).optional(),
+  }).optional(),
 });
 export type Environment = z.infer<typeof EnvironmentSchema>;
 
@@ -100,6 +115,20 @@ export const TerminologyCheckSchema = z.object({
 });
 export type TerminologyCheck = z.infer<typeof TerminologyCheckSchema>;
 
+// Documentation verification - verify UI matches public documentation
+export const DocumentationCheckSchema = z.object({
+  id: z.string(),
+  /** URL of the documentation page to fetch */
+  docUrl: z.string().url(),
+  /** What aspect to verify (used in LLM prompt) */
+  verifyAspect: z.string().describe('What to verify, e.g., "button labels", "menu structure", "terminology"'),
+  /** Specific questions for the LLM to answer about doc/UI consistency */
+  questions: z.array(z.string()).optional(),
+  /** Description of what this check verifies */
+  description: z.string().optional(),
+});
+export type DocumentationCheck = z.infer<typeof DocumentationCheckSchema>;
+
 // Legacy Assertion Types (deprecated - use Checkpoint instead)
 export const AssertionTypeSchema = CheckpointTypeSchema;
 export type AssertionType = CheckpointType;
@@ -122,6 +151,185 @@ export const OutputsSchema = z.object({
 });
 export type Outputs = z.infer<typeof OutputsSchema>;
 
+// ============================================================================
+// Orchestrated Scenario Types (for complex, long-running scenarios)
+// ============================================================================
+
+/** Condition to wait for during orchestration */
+export const WaitConditionSchema = z.object({
+  /** Type of condition to wait for */
+  type: z.enum([
+    'element',           // Wait for UI element
+    'text',             // Wait for text to appear
+    'notification',     // Wait for VS Code notification
+    'file',             // Wait for file to exist
+    'gitStatus',        // Wait for git status change
+    'prStatus',         // Wait for PR to be created/merged
+    'agentComplete',    // Wait for background agent to complete
+    'timeout',          // Just wait for a duration
+    'manual',           // Wait for manual confirmation
+  ]),
+  /** Target selector or identifier */
+  target: z.string().optional(),
+  /** Expected value or pattern */
+  expected: z.string().optional(),
+  /** Maximum time to wait in milliseconds */
+  timeout: z.number().default(300000), // 5 min default
+  /** Interval between checks in milliseconds */
+  pollInterval: z.number().default(5000), // 5 sec default
+  /** Description of what we're waiting for */
+  description: z.string().optional(),
+});
+export type WaitCondition = z.infer<typeof WaitConditionSchema>;
+
+/** A milestone in an orchestrated scenario */
+export const MilestoneSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  /** Steps to execute for this milestone */
+  steps: z.array(StepSchema),
+  /** Conditions to wait for after steps complete */
+  waitFor: z.array(WaitConditionSchema).optional(),
+  /** Screenshot to take at this milestone */
+  screenshot: z.boolean().default(true),
+  /** Timeout for this entire milestone */
+  timeout: z.number().optional(),
+  /** Can this milestone run in parallel with others? */
+  parallel: z.boolean().default(false),
+  /** Milestones that must complete before this one */
+  dependsOn: z.array(z.string()).optional(),
+  /** Whether failure of this milestone should stop the scenario */
+  critical: z.boolean().default(true),
+});
+export type Milestone = z.infer<typeof MilestoneSchema>;
+
+/** Session configuration for multi-instance scenarios */
+export const SessionConfigSchema = z.object({
+  id: z.string(),
+  /** Workspace to open in this session */
+  workspacePath: z.string().optional(),
+  /** Repository to clone for this session */
+  repository: EnvironmentSchema.shape.repository.optional(),
+  /** Whether this session should use a fresh profile */
+  freshProfile: z.boolean().default(true),
+  /** VS Code version for this session */
+  vscodeVersion: VSCodeVersionSchema.optional(),
+});
+export type SessionConfig = z.infer<typeof SessionConfigSchema>;
+
+/** Configuration for orchestrated scenarios */
+export const OrchestratedScenarioConfigSchema = z.object({
+  /** Enable orchestration mode */
+  enabled: z.boolean().default(false),
+  /** Maximum total runtime for the scenario */
+  totalTimeout: z.number().default(1800000), // 30 min default
+  /** Milestones to achieve (replaces steps when orchestration enabled) */
+  milestones: z.array(MilestoneSchema).optional(),
+  /** Multiple VS Code sessions to manage */
+  sessions: z.array(SessionConfigSchema).optional(),
+  /** Checkpoint save interval (for resumability) */
+  checkpointInterval: z.number().default(60000), // 1 min
+  /** Path to save/restore checkpoint state */
+  checkpointPath: z.string().optional(),
+  /** Strategy when a non-critical milestone fails */
+  failureStrategy: z.enum(['continue', 'retry', 'skip', 'abort']).default('continue'),
+  /** Number of retries for failed milestones */
+  maxRetries: z.number().default(2),
+});
+export type OrchestratedScenarioConfig = z.infer<typeof OrchestratedScenarioConfigSchema>;
+
+// ============================================================================
+// Telemetry Validation Types
+// ============================================================================
+
+/** Expected telemetry event to capture */
+export const TelemetryExpectationSchema = z.object({
+  /** Event name to look for */
+  event: z.string(),
+  /** Optional: properties that must be present */
+  properties: z.record(z.any()).optional(),
+  /** Optional: step during which this event should fire */
+  duringStep: z.string().optional(),
+  /** Whether this event is required or optional */
+  required: z.boolean().default(true),
+  /** Timeout to wait for event (ms) */
+  timeout: z.number().default(10000),
+});
+export type TelemetryExpectation = z.infer<typeof TelemetryExpectationSchema>;
+
+/** Telemetry validation configuration */
+export const TelemetryConfigSchema = z.object({
+  /** Enable telemetry capture */
+  enabled: z.boolean().default(false),
+  /** Expected events to verify */
+  expectedEvents: z.array(TelemetryExpectationSchema),
+  /** Capture all events (not just expected ones) for debugging */
+  captureAll: z.boolean().default(false),
+  /** Fail scenario if required events are missing */
+  failOnMissing: z.boolean().default(true),
+});
+export type TelemetryConfig = z.infer<typeof TelemetryConfigSchema>;
+
+// ============================================================================
+// Error Recovery Testing Types
+// ============================================================================
+
+/** Types of errors that can be injected */
+export const ErrorInjectionTypeSchema = z.enum([
+  'networkTimeout',
+  'networkError', 
+  'apiRateLimit',
+  'apiError',
+  'extensionCrash',
+  'authExpired',
+  'diskFull',
+  'permissionDenied',
+]);
+export type ErrorInjectionType = z.infer<typeof ErrorInjectionTypeSchema>;
+
+/** Expected recovery behaviors */
+export const RecoveryBehaviorSchema = z.enum([
+  'errorMessageShown',
+  'retryBehavior',
+  'fallbackUsed',
+  'gracefulDegradation',
+  'reconnectAttempt',
+  'userPrompted',
+  'operationCancelled',
+  'statePreserved',
+]);
+export type RecoveryBehavior = z.infer<typeof RecoveryBehaviorSchema>;
+
+/** Error injection scenario */
+export const ErrorScenarioSchema = z.object({
+  id: z.string(),
+  /** Type of error to inject */
+  inject: ErrorInjectionTypeSchema,
+  /** Step or action during which to inject */
+  duringStep: z.string().optional(),
+  /** Action type to intercept */
+  duringAction: z.string().optional(),
+  /** Expected recovery behavior(s) */
+  expectRecovery: z.array(RecoveryBehaviorSchema),
+  /** Timeout to verify recovery (ms) */
+  recoveryTimeout: z.number().default(30000),
+  /** Description of what we're testing */
+  description: z.string().optional(),
+});
+export type ErrorScenario = z.infer<typeof ErrorScenarioSchema>;
+
+/** Error recovery testing configuration */
+export const ErrorRecoveryConfigSchema = z.object({
+  /** Enable error injection testing */
+  enabled: z.boolean().default(false),
+  /** Error scenarios to test */
+  scenarios: z.array(ErrorScenarioSchema),
+  /** Run each error scenario in isolation */
+  isolateScenarios: z.boolean().default(true),
+});
+export type ErrorRecoveryConfig = z.infer<typeof ErrorRecoveryConfigSchema>;
+
 // Complete Scenario Definition
 export const ScenarioSchema = z.object({
   id: z.string(),
@@ -141,9 +349,38 @@ export const ScenarioSchema = z.object({
   observations: z.array(ObservationSchema).optional(),
   // New: terminology checks to compare UI against docs
   terminologyChecks: z.array(TerminologyCheckSchema).optional(),
+  // New: documentation checks to verify UI matches public docs
+  documentationChecks: z.array(DocumentationCheckSchema).optional(),
   // Legacy: assertions (deprecated, use checkpoints)
   assertions: z.array(AssertionSchema).optional(),
   outputs: OutputsSchema.optional(),
+  // Orchestration config for complex, long-running scenarios
+  orchestration: OrchestratedScenarioConfigSchema.optional(),
+  // Telemetry validation
+  telemetry: TelemetryConfigSchema.optional(),
+  // Error recovery testing
+  errorRecovery: ErrorRecoveryConfigSchema.optional(),
+  // Feature discovery tracking
+  featureDiscovery: z.lazy(() => z.object({
+    enabled: z.boolean().default(false),
+    features: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+      category: z.string().optional(),
+      critical: z.boolean().default(false),
+      entryPoints: z.array(z.object({
+        type: z.enum(['keyboard', 'menu', 'context-menu', 'command-palette', 'button', 'notification', 'quick-action', 'welcome', 'walkthrough']),
+        identifier: z.string(),
+        label: z.string().optional(),
+        selector: z.string().optional(),
+        shortcut: z.string().optional(),
+      })),
+      preferredEntryPoint: z.string().optional(),
+    })),
+    trackAllInteractions: z.boolean().default(false),
+    captureScreenshots: z.boolean().default(false),
+  })).optional(),
 });
 export type Scenario = z.infer<typeof ScenarioSchema>;
 
@@ -208,6 +445,85 @@ export interface TerminologyResult {
   docSource?: string;
 }
 
+/** Result of a documentation verification check */
+export interface DocumentationCheckResult {
+  checkId: string;
+  docUrl: string;
+  docFetched: boolean;
+  docContent?: string;
+  /** LLM's assessment of whether UI matches docs */
+  matches: boolean;
+  /** Confidence score 0-100 */
+  confidence: number;
+  /** LLM's explanation */
+  explanation: string;
+  /** Specific discrepancies found */
+  discrepancies: string[];
+  /** Suggestions for fixing mismatches */
+  suggestions: string[];
+  error?: string;
+}
+
+/** Result of a milestone in an orchestrated scenario */
+export interface MilestoneResult {
+  milestoneId: string;
+  name: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped' | 'waiting';
+  startTime?: string;
+  endTime?: string;
+  duration?: number;
+  stepResults: StepResult[];
+  waitResults?: Array<{
+    conditionType: string;
+    target?: string;
+    passed: boolean;
+    waitTime: number;
+    error?: string;
+  }>;
+  screenshot?: string;
+  error?: string;
+  retryCount?: number;
+}
+
+/** Captured telemetry event */
+export interface CapturedTelemetryEvent {
+  event: string;
+  properties: Record<string, unknown>;
+  timestamp: string;
+  stepId?: string;
+}
+
+/** Result of telemetry validation */
+export interface TelemetryValidationResult {
+  enabled: boolean;
+  capturedEvents: CapturedTelemetryEvent[];
+  expectedResults: Array<{
+    event: string;
+    expected: boolean;
+    found: boolean;
+    matchedEvent?: CapturedTelemetryEvent;
+    error?: string;
+  }>;
+  passed: boolean;
+  missingEvents: string[];
+  unexpectedEvents: string[];
+}
+
+/** Result of an error recovery test */
+export interface ErrorRecoveryResult {
+  scenarioId: string;
+  injectedError: string;
+  recoveryBehaviors: Array<{
+    behavior: string;
+    observed: boolean;
+    evidence?: string;
+  }>;
+  passed: boolean;
+  recoveryTime?: number;
+  screenshot?: string;
+  error?: string;
+}
+
 // ============================================================================
 // LLM Evaluation Types
 // ============================================================================
@@ -236,6 +552,8 @@ export interface LLMEvaluation {
   observations?: ObservationResult[];
   // Terminology check results
   terminologyResults?: TerminologyResult[];
+  // Documentation check results
+  documentationResults?: DocumentationCheckResult[];
   rawResponse?: string;
 }
 
@@ -320,6 +638,22 @@ export interface RunReport {
   error?: string;
   // Comparison data if run with --compare
   comparisonBaseline?: string;
+  // Documentation verification results
+  documentationChecks?: DocumentationCheckResult[];
+  // Milestone results for orchestrated scenarios
+  milestones?: MilestoneResult[];
+  // Workspace setup info
+  workspaceSetup?: {
+    repositoryUrl?: string;
+    ref?: string;
+    clonePath?: string;
+    setupCommandsRun?: boolean;
+    setupDuration?: number;
+  };
+  // Telemetry validation results
+  telemetryValidation?: TelemetryValidationResult;
+  // Error recovery test results
+  errorRecoveryResults?: ErrorRecoveryResult[];
 }
 
 // ============================================================================

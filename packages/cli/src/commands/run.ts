@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import fs from 'fs';
 import path from 'path';
-import { parseScenarioFile, runScenario, RunConfig, Scenario, evaluateScenarioRun, validateScenarioSemantics, formatValidationResult } from '@scenario-grader/core';
+import { parseScenarioFile, runScenario, RunConfig, Scenario, evaluateScenarioRun, validateScenarioSemantics, formatValidationResult, isOrchestratedScenario, runOrchestratedScenario } from '@scenario-grader/core';
 
 interface RunOptions {
   vscodeVersion?: string;
@@ -19,6 +19,7 @@ interface RunOptions {
   compare?: string;
   validate?: boolean;
   screenshotMethod?: 'electron' | 'os' | 'playwright';
+  orchestrated?: boolean;
 }
 
 /**
@@ -148,33 +149,69 @@ export async function runCommand(scenarioId: string | undefined, options: RunOpt
     console.log(`  ${chalk.gray('Fresh:')}      ${config.freshProfile ? chalk.green('Yes') : chalk.gray('No')}`);
     console.log(`  ${chalk.gray('Video:')}      ${config.recordVideo ? chalk.green('Yes') : chalk.gray('No')}`);
     console.log(`  ${chalk.gray('LLM Eval:')}   ${config.enableLLMGrading ? chalk.green('Yes') : chalk.gray('No')}`);
+    
+    // Check for orchestrated scenario
+    const useOrchestration = options.orchestrated || isOrchestratedScenario(scenario);
+    if (useOrchestration) {
+      console.log(`  ${chalk.gray('Mode:')}       ${chalk.magenta('Orchestrated')} (long-running)`);
+      if (scenario.orchestration?.milestones) {
+        console.log(`  ${chalk.gray('Milestones:')} ${scenario.orchestration.milestones.length}`);
+      }
+    }
+    
     console.log(chalk.dim('─'.repeat(60)));
     console.log('');
     
     const runSpinner = ora('Executing scenario...').start();
     
-    // Run the scenario
-    const report = await runScenario(scenario, config, (event) => {
-      switch (event.type) {
-        case 'step:start':
-          runSpinner.text = `Step: ${event.data.description}`;
-          break;
-        case 'step:complete':
-          if (event.data.status === 'passed') {
-            runSpinner.succeed(`${chalk.green('✓')} ${event.data.stepId}`);
-          } else {
-            runSpinner.fail(`${chalk.red('✗')} ${event.data.stepId}: ${event.data.error || 'Failed'}`);
-          }
-          runSpinner.start();
-          break;
-        case 'log':
-          // Could show verbose logs here
-          break;
-        case 'screenshot':
-          runSpinner.text = `Screenshot: ${event.data.path}`;
-          break;
-      }
-    });
+    // Run the scenario (orchestrated or standard)
+    let report;
+    if (useOrchestration) {
+      runSpinner.text = 'Running orchestrated scenario (this may take a while)...';
+      report = await runOrchestratedScenario(scenario, config, (event) => {
+        switch (event.type) {
+          case 'step:start':
+            runSpinner.text = `Step: ${event.data.description}`;
+            break;
+          case 'step:complete':
+            if (event.data.status === 'passed') {
+              runSpinner.succeed(`${chalk.green('✓')} ${event.data.stepId}`);
+            } else {
+              runSpinner.fail(`${chalk.red('✗')} ${event.data.stepId}: ${event.data.error || 'Failed'}`);
+            }
+            runSpinner.start();
+            break;
+          case 'log':
+            // For orchestrated scenarios, show milestone progress
+            if (event.data.message?.includes('milestone')) {
+              runSpinner.text = event.data.message;
+            }
+            break;
+        }
+      });
+    } else {
+      report = await runScenario(scenario, config, (event) => {
+        switch (event.type) {
+          case 'step:start':
+            runSpinner.text = `Step: ${event.data.description}`;
+            break;
+          case 'step:complete':
+            if (event.data.status === 'passed') {
+              runSpinner.succeed(`${chalk.green('✓')} ${event.data.stepId}`);
+            } else {
+              runSpinner.fail(`${chalk.red('✗')} ${event.data.stepId}: ${event.data.error || 'Failed'}`);
+            }
+            runSpinner.start();
+            break;
+          case 'log':
+            // Could show verbose logs here
+            break;
+          case 'screenshot':
+            runSpinner.text = `Screenshot: ${event.data.path}`;
+            break;
+        }
+      });
+    }
     
     runSpinner.stop();
     console.log('');

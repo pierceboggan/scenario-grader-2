@@ -1,0 +1,104 @@
+id: copilot-chat-telemetry
+name: Copilot Chat with Telemetry Validation
+description: Test Copilot Chat while verifying expected telemetry events fire
+priority: P1
+version: "1.0"
+tags:
+  - copilot
+  - chat
+  - telemetry
+owner: telemetry-team
+
+environment:
+  vscode: stable
+  extensions:
+    - GitHub.copilot
+    - GitHub.copilot-chat
+
+# Telemetry validation configuration
+telemetry:
+  enabled: true
+  captureAll: true  # Capture all events for debugging
+  failOnMissing: true
+  expectedEvents:
+    - event: "copilot/chat/opened"
+      required: true
+      timeout: 5000
+      
+    - event: "copilot/chat/messageSubmitted"
+      required: true
+      duringStep: send_message
+      properties:
+        hasContext: true
+        
+    - event: "copilot/chat/responseReceived"
+      required: true
+      duringStep: send_message
+      timeout: 30000
+      
+    - event: "copilot/chat/suggestionApplied"
+      required: false  # Only if user applies code
+      properties:
+        type: "codeBlock"
+
+preconditions:
+  - VS Code is running with Copilot signed in
+  - A project is open with at least one code file
+
+steps:
+  - id: open_file
+    description: Open a source code file
+    action: openFile
+    optional: false
+    args:
+      path: "src/index.ts"
+    hints:
+      - type: keyboard
+        value: "Cmd+P"
+
+  - id: open_chat
+    description: Open Copilot Chat panel
+    action: openCopilotChat
+    optional: false
+    hints:
+      - type: keyboard
+        value: "Cmd+Shift+I"
+
+  - id: send_message
+    description: Send a chat message asking for help
+    action: sendChatMessage
+    optional: false
+    args:
+      message: "Explain what this code does and suggest improvements"
+      waitForResponse: true
+    hints:
+      - type: type
+        value: "Explain what this code does"
+
+  - id: verify_response
+    description: Verify Copilot responded with helpful content
+    action: waitForElement
+    optional: false
+    args:
+      selector: ".chat-response .markdown-body"
+      timeout: 30000
+
+checkpoints:
+  - id: chat_opened
+    type: elementVisible
+    afterStep: open_chat
+    verify: "Copilot Chat panel is visible"
+    
+  - id: response_received
+    type: elementVisible
+    afterStep: verify_response
+    verify: "Response contains code explanation or suggestions"
+
+observations:
+  - id: telemetry_events
+    question: "Were all expected telemetry events captured?"
+    category: performance
+    
+  - id: event_timing
+    question: "Were events fired within expected timeouts?"
+    category: performance

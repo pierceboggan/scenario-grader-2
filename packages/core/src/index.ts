@@ -89,3 +89,104 @@ export {
   type GapReportItem,
   type IterationRecord,
 } from './handoff';
+
+// Authentication (Device Code Flow)
+export {
+  authenticateWithDeviceFlow,
+  startDeviceFlow,
+  pollForToken,
+  getGitHubUser,
+  saveAuth,
+  loadAuth,
+  hasValidAuth,
+  clearAuth,
+  getAuthStatus,
+  verifyAuth,
+  setupVSCodeAuth,
+  generateVSCodeGitHubAuth,
+  type StoredAuth,
+} from './auth';
+
+// Workspace Setup (Repository Cloning)
+export {
+  setupWorkspace,
+  cleanupWorkspace,
+  listCachedWorkspaces,
+  pruneWorkspaces,
+  type WorkspaceSetupResult,
+} from './workspace';
+
+// Documentation Verification
+export {
+  runDocumentationChecks,
+  verifyDocumentationWithLLM,
+  generateDocVerificationPrompt,
+  generateDocSyncReport,
+} from './documentation';
+
+// Telemetry Validation
+export {
+  TelemetryCollector,
+  generateTelemetryReport,
+} from './telemetry';
+
+// Error Recovery Testing
+export {
+  ErrorInjector,
+  runErrorRecoveryTests,
+  verifyRecoveryBehavior,
+  generateErrorRecoveryReport,
+} from './error-recovery';
+
+// Scenario Generator (from recordings)
+export {
+  generateScenarioFromRecording,
+  generateScenarioYAML,
+  interactiveAnnotation,
+  combineSemanticActions,
+  detectSemanticAction,
+  type RawAction,
+  type GeneratorConfig,
+} from './scenario-generator';
+
+// Feature Discovery Tracking
+export {
+  FeatureDiscoveryTracker,
+  generateFeatureDiscoveryReport,
+  COPILOT_FEATURES,
+  type FeatureDefinition,
+  type FeatureDiscoveryConfig,
+  type FeatureDiscoveryEvent,
+  type FeatureDiscoveryResult,
+  type MissedFeature,
+  type EntryPoint,
+} from './feature-discovery';
+
+// Structured Error Handling
+export {
+  ScenarioError,
+  ParseError,
+  ValidationError,
+  RunnerError as StructuredRunnerError,
+  AuthError,
+  NetworkError,
+  EvaluatorError,
+  ErrorCode,
+  ErrorSeverity,
+  Errors,
+  wrapError,
+  isErrorCode,
+  isRecoverable,
+  formatError,
+} from './errors';
+
+// Orchestrated Scenarios (Long-running, Multi-session)
+export {
+  runOrchestratedScenario,
+  isOrchestratedScenario,
+} from './orchestrator';
+
+// Step Utilities
+export {
+  executeStepSimple,
+} from './runner-utils';

@@ -1,0 +1,264 @@
+# Background Agent Multi-Session Orchestration
+#
+# This is a complex, long-running scenario that tests the background agent
+# workflow with multiple parallel sessions. It:
+# 1. Clones a real repository
+# 2. Starts multiple background agents on different issues
+# 3. Waits for them to complete (5-15 minutes each)
+# 4. Merges the results
+#
+# Run with: scenario-runner run background-agent-orchestrated --video
+
+id: background-agent-orchestrated
+name: "Background Agent Multi-Session Orchestration"
+description: |
+  Tests the complete background agent workflow with multiple parallel agents
+  working on different issues, then merging their results.
+priority: P0
+owner: copilot-team
+tags:
+  - copilot
+  - agent
+  - background
+  - orchestrated
+  - long-running
+
+environment:
+  vscodeTarget: desktop
+  vscodeVersion: insiders
+  platform: macOS
+  copilotChannel: prerelease
+  
+  # Clone a real repository for testing
+  repository:
+    url: https://github.com/microsoft/vscode-extension-samples
+    ref: main
+    subdir: helloworld-sample
+    setupCommands:
+      - npm install
+
+# Documentation to verify against
+documentationChecks:
+  - id: agent-docs
+    docUrl: https://code.visualstudio.com/docs/copilot/copilot-agents
+    description: Verify agent UI matches documentation
+    uiMatches:
+      - description: "Background agent status indicator"
+        expectedText: "Agent"
+        fuzzyMatch: true
+      - description: "Agent session panel"
+        selector: "[aria-label*='Agent']"
+
+# Orchestration configuration for this complex scenario
+orchestration:
+  enabled: true
+  totalTimeout: 1800000  # 30 minutes max
+  checkpointInterval: 60000  # Save state every minute
+  failureStrategy: continue  # Don't stop on non-critical failures
+  maxRetries: 2
+  
+  # Multiple VS Code sessions (could be used for side-by-side comparison)
+  sessions:
+    - id: primary
+      freshProfile: true
+      vscodeVersion: insiders
+    # Uncomment to add a second session for comparison:
+    # - id: secondary
+    #   freshProfile: true
+    #   vscodeVersion: stable
+  
+  milestones:
+    # Phase 1: Setup
+    - id: setup
+      name: "Setup Workspace"
+      description: "Open workspace and verify Copilot is available"
+      critical: true
+      steps:
+        - id: wait_ready
+          description: "Wait for VS Code to fully load"
+          action: wait
+          args:
+            duration: 3000
+        
+        - id: open_copilot
+          description: "Open Copilot Chat"
+          action: openCopilotChat
+        
+        - id: verify_auth
+          description: "Verify Copilot is authenticated"
+          action: wait
+          args:
+            duration: 2000
+      
+      waitFor:
+        - type: element
+          target: ".chat-widget"
+          description: "Chat widget is visible"
+          timeout: 30000
+    
+    # Phase 2: Start first background agent
+    - id: agent1_start
+      name: "Start Background Agent #1"
+      dependsOn: [setup]
+      critical: true
+      steps:
+        - id: open_command_palette
+          description: "Open command palette"
+          action: openCommandPalette
+        
+        - id: search_agent
+          description: "Search for Start Agent"
+          action: typeText
+          args:
+            text: "Copilot: Start Background Agent"
+        
+        - id: select_command
+          description: "Select the command"
+          action: pressKey
+          args:
+            key: Enter
+        
+        - id: describe_task
+          description: "Describe the task for agent"
+          action: typeText
+          args:
+            text: "Add JSDoc comments to all exported functions in extension.ts"
+        
+        - id: submit_task
+          description: "Submit the task"
+          action: pressKey
+          args:
+            key: Enter
+      
+      waitFor:
+        - type: notification
+          expected: "Background agent started"
+          timeout: 30000
+    
+    # Phase 3: Start second background agent (parallel with first)
+    - id: agent2_start
+      name: "Start Background Agent #2"
+      dependsOn: [setup]
+      parallel: true  # Can run in parallel with agent1_start
+      critical: false  # Non-critical - continue if this fails
+      steps:
+        - id: open_command_palette
+          description: "Open command palette"
+          action: openCommandPalette
+        
+        - id: search_agent
+          description: "Search for Start Agent"
+          action: typeText
+          args:
+            text: "Copilot: Start Background Agent"
+        
+        - id: select_command
+          description: "Select the command"
+          action: pressKey
+          args:
+            key: Enter
+        
+        - id: describe_task
+          description: "Describe the second task"
+          action: typeText
+          args:
+            text: "Add unit tests for the activate function"
+        
+        - id: submit_task
+          description: "Submit the task"
+          action: pressKey
+          args:
+            key: Enter
+      
+      waitFor:
+        - type: notification
+          expected: "Background agent started"
+          timeout: 30000
+    
+    # Phase 4: Wait for agents to complete
+    - id: wait_agents
+      name: "Wait for Agents to Complete"
+      dependsOn: [agent1_start, agent2_start]
+      critical: true
+      steps:
+        - id: log_waiting
+          description: "Log that we're waiting"
+          action: wait
+          args:
+            duration: 1000
+      
+      waitFor:
+        - type: agentComplete
+          description: "Wait for all background agents to finish"
+          timeout: 900000  # 15 minutes
+          pollInterval: 10000  # Check every 10 seconds
+    
+    # Phase 5: Review and merge
+    - id: review_changes
+      name: "Review Agent Changes"
+      dependsOn: [wait_agents]
+      critical: true
+      screenshot: true
+      steps:
+        - id: open_agent_panel
+          description: "Open agent sessions panel"
+          action: openCommandPalette
+        
+        - id: search_sessions
+          description: "Search for agent sessions"
+          action: typeText
+          args:
+            text: "Copilot: View Agent Sessions"
+        
+        - id: select_view
+          description: "Select the view"
+          action: pressKey
+          args:
+            key: Enter
+        
+        - id: wait_panel
+          description: "Wait for panel to load"
+          action: wait
+          args:
+            duration: 2000
+        
+        - id: select_first_session
+          description: "Select first session"
+          action: pressKey
+          args:
+            key: Enter
+      
+      waitFor:
+        - type: element
+          target: ".agent-session-details"
+          timeout: 10000
+    
+    # Phase 6: Final verification
+    - id: final_verification
+      name: "Final Verification"
+      dependsOn: [review_changes]
+      critical: true
+      screenshot: true
+      steps:
+        - id: check_changes
+          description: "Verify changes are visible"
+          action: wait
+          args:
+            duration: 2000
+
+# Observations to capture about the experience
+observations:
+  - question: "How clear was the status of each background agent during execution?"
+    category: clarity
+  - question: "Were there any confusing or unexpected UI states during the workflow?"
+    category: usability
+  - question: "How long did the user have to wait without meaningful feedback?"
+    category: friction
+
+# These steps are used for non-orchestrated runs (simple mode)
+steps:
+  - id: setup
+    description: "Note: This scenario requires orchestration mode"
+    action: wait
+    args:
+      duration: 1000
