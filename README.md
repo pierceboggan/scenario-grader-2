@@ -297,9 +297,9 @@ The LLM evaluator grades scenarios on 6 dimensions:
 
 Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
-## 🤖 VS Code Custom Agents (NEW!)
+## 🤖 VS Code Custom Agents
 
-You can now run scenarios directly in VS Code using Copilot Chat with custom agents. No CLI needed!
+Run scenarios directly in VS Code using Copilot Chat with custom agents. No CLI needed - and you can delegate to background agents for testing at scale!
 
 ### Quick Start
 
@@ -309,32 +309,243 @@ You can now run scenarios directly in VS Code using Copilot Chat with custom age
 
 ### Available Agents
 
-| Agent | Description | Usage |
-|-------|-------------|-------|
-| `@scenario-runner` | Run scenario tests | `@scenario-runner Run copilot-model-picker` |
-| `@report-generator` | Generate test reports | Handoff from scenario-runner |
-| `@scenario-background` | Long-running scenarios | `@scenario-background Run background-agent-session` |
+| Agent | Description | Best For |
+|-------|-------------|----------|
+| `@scenario-runner` | Interactive scenario testing | Quick tests (<5 min), debugging, iterating |
+| `@scenario-background` | Long-running autonomous tests | Background agents, cloud agents, batch runs |
+| `@report-generator` | Generate detailed Markdown reports | Called via handoff after runs complete |
 
-### Benefits Over CLI
+### When to Use Each Agent
 
-- **Zero setup**: Works in any VS Code with Copilot
-- **Self-healing**: Agent adapts to UI changes
-- **No LLM costs**: Uses your Copilot subscription
-- **Interactive**: Ask follow-up questions during runs
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Which Agent Should I Use?                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Quick test, need to watch it run?                              │
+│  └──→ @scenario-runner                                          │
+│                                                                  │
+│  Long-running (>5 min) or need to run many tests?              │
+│  └──→ @scenario-background                                      │
+│                                                                  │
+│  Need a formatted report for stakeholders?                      │
+│  └──→ Click "Generate Report" handoff after any run            │
+│                                                                  │
+│  Testing changes at scale across multiple PRs/branches?         │
+│  └──→ @scenario-background with worktree delegation            │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Example Workflows
 
+#### Interactive Testing
 ```
 # Run a single scenario
 @scenario-runner Run the copilot-inline-chat scenario
 
-# Run all P0 scenarios
+# Run all P0 scenarios  
 @scenario-runner Run all P0 priority scenarios
 
 # Run and generate report
 @scenario-runner Run copilot-agent-mode
 → Click [Generate Report] handoff button
 ```
+
+#### Background Testing (Long-Running)
+```
+# Run a long background agent scenario
+@scenario-background Run background-agent-session
+
+# Run multiple scenarios as a batch
+@scenario-background Run all scenarios tagged with "agents"
+```
+
+### Benefits Over CLI
+
+- **Zero setup**: Works in any VS Code with Copilot
+- **Self-healing**: Agent adapts to UI changes automatically
+- **No LLM costs**: Uses your existing Copilot subscription
+- **Interactive**: Ask follow-up questions during runs
+- **Handoffs**: Seamlessly pass results between agents
+
+---
+
+## 🚀 Testing at Scale with Background Agents & Git Worktrees
+
+For testing changes across multiple branches, PRs, or configurations simultaneously, use the **worktree delegation pattern** with background agents. This lets you run many test sessions in parallel without conflicts.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Worktree Delegation Flow                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Main Workspace                    Git Worktrees                │
+│   ┌──────────────┐                 ┌──────────────┐             │
+│   │   Your Code  │ ──delegate──→   │  Worktree 1  │ (PR #123)   │
+│   │              │                 │  Tests run   │             │
+│   │              │                 └──────────────┘             │
+│   │              │                 ┌──────────────┐             │
+│   │              │ ──delegate──→   │  Worktree 2  │ (PR #456)   │
+│   │              │                 │  Tests run   │             │
+│   │              │                 └──────────────┘             │
+│   │              │                 ┌──────────────┐             │
+│   │              │ ──delegate──→   │  Worktree 3  │ (feature-x) │
+│   │              │                 │  Tests run   │             │
+│   └──────────────┘                 └──────────────┘             │
+│                                            │                     │
+│                      ←── results merge ────┘                     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Why Worktrees?
+
+- **Isolation**: Each test runs in its own directory - no conflicts
+- **Parallelism**: Run 5, 10, or 20+ tests simultaneously  
+- **Clean state**: Each worktree has a fresh git state
+- **Easy cleanup**: Delete the worktree folder when done
+
+### Quick Start: Worktree Testing
+
+#### 1. Create Worktrees for Each Test Target
+
+```bash
+# Create worktrees for different PRs/branches
+git worktree add ../test-pr-123 origin/pr-123
+git worktree add ../test-pr-456 origin/pr-456
+git worktree add ../test-feature-x feature-x
+```
+
+#### 2. Delegate Tests to Background Agents
+
+```
+@scenario-background Run the copilot-agent-mode scenario 
+in the worktree at ../test-pr-123
+
+@scenario-background Run all P0 scenarios 
+in the worktree at ../test-pr-456
+```
+
+Or use the CLI for batch operations:
+```bash
+# Run tests across all worktrees
+for worktree in ../test-pr-*; do
+  npx scenario-runner run --all --workspace "$worktree" --orchestrated &
+done
+wait
+```
+
+#### 3. Collect Results
+
+Results are saved to each worktree's `.scenario-runner/` directory:
+```
+../test-pr-123/.scenario-runner/
+├── checkpoints/          # Progress tracking
+├── artifacts/            # Screenshots, logs
+└── reports/              # Generated reports
+```
+
+### Scenario: `background-agent-worktree`
+
+Use this scenario template to test with worktree isolation:
+
+```yaml
+id: my-worktree-test
+name: "Test Feature X in Isolation"
+tags: [background, worktree, isolation]
+priority: P1
+
+steps:
+  - id: create_session
+    action: createBackgroundSession
+    args:
+      isolation: worktree    # Use git worktree instead of main workspace
+      branch: feature-x
+      
+  - id: run_task
+    action: sendChatMessage  
+    args:
+      message: "Run all unit tests and report failures"
+      waitForResponse: false
+      
+  - id: wait_complete
+    action: wait
+    args:
+      duration: 300000       # 5 minute timeout
+```
+
+### Multi-Session Orchestration
+
+For complex test matrices, use the orchestration system:
+
+```yaml
+orchestration:
+  enabled: true
+  totalTimeout: 1800000      # 30 min max
+  checkpointInterval: 60000  # Save progress every minute
+  failureStrategy: continue  # Don't stop on failures
+  
+  sessions:
+    - id: stable
+      worktree: ../test-stable
+      vscodeVersion: stable
+      
+    - id: insiders  
+      worktree: ../test-insiders
+      vscodeVersion: insiders
+      
+  milestones:
+    - id: run_tests
+      parallel: true         # Run both sessions in parallel
+      steps:
+        - action: runTests
+```
+
+### CI/CD Integration
+
+Run tests at scale in your GitHub Actions workflow:
+
+```yaml
+# .github/workflows/scenario-tests.yml
+jobs:
+  scenario-tests:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        scenario: [copilot-chat, copilot-inline, copilot-agent-mode]
+        vscode: [stable, insiders]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create worktree
+        run: |
+          git worktree add ../test-${{ matrix.scenario }}-${{ matrix.vscode }}
+          
+      - name: Run scenario
+        run: |
+          npx scenario-runner run ${{ matrix.scenario }} \
+            --workspace ../test-${{ matrix.scenario }}-${{ matrix.vscode }} \
+            --vscode-version ${{ matrix.vscode }} \
+            --orchestrated \
+            --json > results.json
+            
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.scenario }}-${{ matrix.vscode }}
+          path: results.json
+```
+
+### Tips for Scale Testing
+
+1. **Use `--orchestrated` flag** for long-running tests with checkpoints
+2. **Set appropriate timeouts** - background agent tests may need 10-30+ minutes
+3. **Use `failureStrategy: continue`** to run all tests even if some fail
+4. **Take screenshots liberally** - helps debug failures across many runs
+5. **Aggregate reports** - use `@report-generator` to combine results
 
 See [docs/MCP_INTEGRATION_PLAN.md](docs/MCP_INTEGRATION_PLAN.md) for full documentation.
 
